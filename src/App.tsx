@@ -47,6 +47,17 @@ export const NETWORKS: NetworkInfo[] = [
     description: 'Smallest distilled net from T10. SE blocks give slightly better positional sense than Tiny Gyal at the same Elo.',
     source: 'https://github.com/dkappe/leela-chess-weights/releases/tag/11258-16x2-se',
   },
+  {
+    id: 'maia-1100',
+    name: 'Maia 1100',
+    arch: '64x6-SE',
+    file: 'maia-1100.onnx',
+    size: '3.3 MB',
+    downloadSize: '2.4 MB',
+    elo: '1100',
+    description: 'Human-like play at 1100 Lichess rating. Trained to predict human moves, not play optimally.',
+    source: 'https://github.com/CSSLab/maia-chess/releases/tag/v1.0',
+  },
   // ── Novice ───────────────────────────────────────────────────────
   {
     id: 'mean-girl-8',
@@ -70,6 +81,28 @@ export const NETWORKS: NetworkInfo[] = [
     description: 'Distilled T10 net. Slightly larger than 16x2; starts showing basic tactical awareness.',
     source: 'https://github.com/dkappe/leela-chess-weights/releases/tag/11258-24x3-se',
   },
+  {
+    id: 'maia-1200',
+    name: 'Maia 1200',
+    arch: '64x6-SE',
+    file: 'maia-1200.onnx',
+    size: '3.3 MB',
+    downloadSize: '2.3 MB',
+    elo: '1200',
+    description: 'Human-like play at 1200 Lichess rating. Trained to predict human moves, not play optimally.',
+    source: 'https://github.com/CSSLab/maia-chess/releases/tag/v1.0',
+  },
+  {
+    id: 'maia-1300',
+    name: 'Maia 1300',
+    arch: '64x6-SE',
+    file: 'maia-1300.onnx',
+    size: '3.3 MB',
+    downloadSize: '2.3 MB',
+    elo: '1300',
+    description: 'Human-like play at 1300 Lichess rating. Trained to predict human moves, not play optimally.',
+    source: 'https://github.com/CSSLab/maia-chess/releases/tag/v1.0',
+  },
   // ── Casual ───────────────────────────────────────────────────────
   {
     id: '11258-32x4-se',
@@ -82,7 +115,40 @@ export const NETWORKS: NetworkInfo[] = [
     description: 'Distilled T10 net. Plays reasonably solid chess but beatable by intermediate club players.',
     source: 'https://github.com/dkappe/leela-chess-weights/releases/tag/11258-32x4-se',
   },
+  {
+    id: 'maia-1400',
+    name: 'Maia 1400',
+    arch: '64x6-SE',
+    file: 'maia-1400.onnx',
+    size: '3.3 MB',
+    downloadSize: '2.4 MB',
+    elo: '1400',
+    description: 'Human-like play at 1400 Lichess rating. Trained to predict human moves, not play optimally.',
+    source: 'https://github.com/CSSLab/maia-chess/releases/tag/v1.0',
+  },
+  {
+    id: 'maia-1500',
+    name: 'Maia 1500',
+    arch: '64x6-SE',
+    file: 'maia-1500.onnx',
+    size: '3.3 MB',
+    downloadSize: '2.3 MB',
+    elo: '1500',
+    description: 'Human-like play at 1500 Lichess rating. Trained to predict human moves, not play optimally.',
+    source: 'https://github.com/CSSLab/maia-chess/releases/tag/v1.0',
+  },
   // ── Intermediate ─────────────────────────────────────────────────
+  {
+    id: 'maia-1600',
+    name: 'Maia 1600',
+    arch: '64x6-SE',
+    file: 'maia-1600.onnx',
+    size: '3.3 MB',
+    downloadSize: '2.4 MB',
+    elo: '1600',
+    description: 'Human-like play at 1600 Lichess rating. Trained to predict human moves, not play optimally.',
+    source: 'https://github.com/CSSLab/maia-chess/releases/tag/v1.0',
+  },
   {
     id: 'evilgyal-6',
     name: 'Evil Gyal 6',
@@ -93,6 +159,39 @@ export const NETWORKS: NetworkInfo[] = [
     elo: '~1700–1800',
     description: 'Lichess-trained net with a chaotic, unpredictable style. Loves gambits and piece activity over material.',
     source: 'https://github.com/dkappe/leela-chess-weights/releases/tag/evilgyal-6',
+  },
+  {
+    id: 'maia-1700',
+    name: 'Maia 1700',
+    arch: '64x6-SE',
+    file: 'maia-1700.onnx',
+    size: '3.3 MB',
+    downloadSize: '2.4 MB',
+    elo: '1700',
+    description: 'Human-like play at 1700 Lichess rating. Trained to predict human moves, not play optimally.',
+    source: 'https://github.com/CSSLab/maia-chess/releases/tag/v1.0',
+  },
+  {
+    id: 'maia-1800',
+    name: 'Maia 1800',
+    arch: '64x6-SE',
+    file: 'maia-1800.onnx',
+    size: '3.3 MB',
+    downloadSize: '2.3 MB',
+    elo: '1800',
+    description: 'Human-like play at 1800 Lichess rating. Trained to predict human moves, not play optimally.',
+    source: 'https://github.com/CSSLab/maia-chess/releases/tag/v1.0',
+  },
+  {
+    id: 'maia-1900',
+    name: 'Maia 1900',
+    arch: '64x6-SE',
+    file: 'maia-1900.onnx',
+    size: '3.3 MB',
+    downloadSize: '2.3 MB',
+    elo: '1900',
+    description: 'Human-like play at 1900 Lichess rating. Trained to predict human moves, not play optimally.',
+    source: 'https://github.com/CSSLab/maia-chess/releases/tag/v1.0',
   },
   {
     id: 'goodgyal-5',
@@ -217,6 +316,17 @@ export const NETWORKS: NetworkInfo[] = [
     elo: '~2250–2350',
     description: 'Distilled T10 net. Extra residual block vs 112x9 gives slightly deeper calculation. CCRL 2966 with search.',
     source: 'https://github.com/dkappe/leela-chess-weights/releases/tag/11258-112x10-se',
+  },
+  {
+    id: 'maia-2200',
+    name: 'Maia 2200',
+    arch: '64x6-SE',
+    file: 'maia-2200.onnx',
+    size: '3.3 MB',
+    downloadSize: '2.2 MB',
+    elo: '2200',
+    description: 'Human-like play at 2200 Lichess rating. Trained to predict human moves, not play optimally.',
+    source: 'https://github.com/CallOn84/LeelaNets',
   },
   // ── Master ───────────────────────────────────────────────────────
   {
@@ -503,11 +613,11 @@ function saveGame(game: SavedGame) {
   localStorage.setItem('lc0-games', JSON.stringify(games.slice(0, 50)))
 }
 
-function buildPgn(moves: string[], config: GameConfig, result: string): string {
+function buildPgn(moves: string[], config: GameConfig, result: string, actualPlayerColor: 'w' | 'b'): string {
   const date = new Date()
   const dateStr = `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`
-  const white = config.playerColor === 'w' ? 'You' : config.network.name
-  const black = config.playerColor === 'b' ? 'You' : config.network.name
+  const white = actualPlayerColor === 'w' ? 'You' : config.network.name
+  const black = actualPlayerColor === 'b' ? 'You' : config.network.name
 
   let pgn = `[Event "Play Lc0"]\n`
   pgn += `[Site "Browser"]\n`
@@ -646,18 +756,18 @@ function GameScreen({ config, onBackToMenu }: { config: GameConfig; onBackToMenu
   useEffect(() => {
     if (game.isGameOver() && !gameSaved && moveHistory.length > 0) {
       const result = getResult(game)
-      const pgn = buildPgn(moveHistory, config, result)
+      const pgn = buildPgn(moveHistory, config, result, playerColor)
       saveGame({
         date: new Date().toISOString(),
         network: config.network.name,
-        playerColor: config.playerColor,
+        playerColor: playerColor,
         result,
         pgn,
         moves: moveHistory,
       })
       setGameSaved(true)
     }
-  }, [game, gameSaved, moveHistory, config])
+  }, [game, gameSaved, moveHistory, config, playerColor])
 
   // Check if a move is a pawn promotion
   const isPromotion = useCallback(
@@ -768,12 +878,12 @@ function GameScreen({ config, onBackToMenu }: { config: GameConfig; onBackToMenu
 
     // Create a resigned result: if player is white, black wins (0-1), else white wins (1-0)
     const resignResult = playerColor === 'w' ? '0-1' : '1-0'
-    const pgn = buildPgn(moveHistory, config, resignResult)
+    const pgn = buildPgn(moveHistory, config, resignResult, playerColor)
 
     saveGame({
       date: new Date().toISOString(),
       network: config.network.name,
-      playerColor: config.playerColor,
+      playerColor: playerColor,
       result: resignResult,
       pgn,
       moves: moveHistory,
@@ -792,7 +902,7 @@ function GameScreen({ config, onBackToMenu }: { config: GameConfig; onBackToMenu
   const disabled = isViewingHistory || isEnginesTurn || engineState.isThinking || game.isGameOver() || !engineState.isReady
 
   const gameOver = game.isGameOver()
-  const pgn = gameOver ? buildPgn(moveHistory, config, getResult(game)) : null
+  const pgn = gameOver ? buildPgn(moveHistory, config, getResult(game), playerColor) : null
 
   return (
     <div className="flex flex-col items-center gap-6 p-8">
