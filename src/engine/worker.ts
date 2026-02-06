@@ -2,7 +2,7 @@ import type { WorkerRequest, WorkerResponse } from '../types'
 import { encodeFenHistory } from './encoding'
 import { decodePolicyOutput } from './decoding'
 import { initModel, runInference } from './inference'
-import { getCachedModel, cacheModel } from './modelCache'
+import { getCachedModel, cacheModel, decompressGzip } from './modelCache'
 
 function post(msg: WorkerResponse) {
   self.postMessage(msg)
@@ -25,7 +25,7 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
             message: 'Downloading model...',
           })
 
-          const response = await fetch(msg.modelUrl)
+          const response = await fetch(msg.modelUrl + '.bin')
           if (!response.ok) {
             throw new Error(`Failed to fetch model: ${response.status}`)
           }
@@ -34,6 +34,7 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
           const contentLength = response.headers.get('Content-Length')
           const total = contentLength ? parseInt(contentLength) : 0
 
+          let compressed: ArrayBuffer
           if (total > 0 && response.body) {
             const reader = response.body.getReader()
             const chunks: Uint8Array[] = []
@@ -58,10 +59,17 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
               buffer.set(chunk, pos)
               pos += chunk.length
             }
-            modelData = buffer.buffer
+            compressed = buffer.buffer
           } else {
-            modelData = await response.arrayBuffer()
+            compressed = await response.arrayBuffer()
           }
+
+          post({
+            type: 'initProgress',
+            progress: 0.7,
+            message: 'Decompressing...',
+          })
+          modelData = await decompressGzip(compressed)
 
           post({
             type: 'initProgress',

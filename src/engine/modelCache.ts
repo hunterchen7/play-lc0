@@ -52,6 +52,12 @@ export async function deleteCachedModel(key: string): Promise<void> {
   }
 }
 
+export async function decompressGzip(data: ArrayBuffer): Promise<ArrayBuffer> {
+  const ds = new DecompressionStream('gzip')
+  const decompressed = new Blob([data]).stream().pipeThrough(ds)
+  return new Response(decompressed).arrayBuffer()
+}
+
 export async function hasModelCached(key: string): Promise<boolean> {
   try {
     const db = await getDB()
