@@ -141,7 +141,7 @@ export default function App() {
   )
 }
 
-interface SavedGame {
+export interface SavedGame {
   date: string
   network: string
   playerColor: 'w' | 'b'
@@ -150,7 +150,7 @@ interface SavedGame {
   moves: string[]
 }
 
-function getSavedGames(): SavedGame[] {
+export function getSavedGames(): SavedGame[] {
   try {
     return JSON.parse(localStorage.getItem('lc0-games') || '[]')
   } catch {

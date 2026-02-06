@@ -42,3 +42,22 @@ export async function cacheModel(
     console.warn('Failed to cache model:', e)
   }
 }
+
+export async function deleteCachedModel(key: string): Promise<void> {
+  try {
+    const db = await getDB()
+    await db.delete(STORE_NAME, key)
+  } catch (e) {
+    console.warn('Failed to delete cached model:', e)
+  }
+}
+
+export async function hasModelCached(key: string): Promise<boolean> {
+  try {
+    const db = await getDB()
+    const result = await db.get(STORE_NAME, key)
+    return result !== undefined
+  } catch {
+    return false
+  }
+}

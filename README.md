@@ -1,73 +1,54 @@
-# React + TypeScript + Vite
+# Play Lc0
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Play chess against [Leela Chess Zero](https://lczero.org/) neural networks directly in your browser. All inference runs client-side via ONNX Runtime Web — no server required.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Multiple networks** — Choose from 7 networks ranging from ~800 to ~2400 Elo
+- **Fully client-side** — Neural network inference runs in a Web Worker using WebGPU (with WASM fallback)
+- **Model caching** — Models are cached in IndexedDB after the first download
+- **Click or drag** — Move pieces by clicking or drag-and-drop, with legal move indicators
+- **Move history** — Clickable move list with arrow key navigation and position browsing
+- **Temperature control** — Adjust randomness from deterministic (best move) to creative play
+- **WDL bar** — Win/Draw/Loss visualization from White's perspective
+- **Game persistence** — Completed games auto-save to localStorage with PGN export
 
-## React Compiler
+## Available Networks
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+| Network        | Arch      | Elo        | Style                    |
+| -------------- | --------- | ---------- | ------------------------ |
+| Tiny Gyal      | 16x2 SE   | ~800-1000  | Weak, beginner-friendly  |
+| Mean Girl 8    | 32x4 SE   | ~1200-1400 | Aggressive, entertaining |
+| 11258-32x4-SE  | 32x4 SE   | ~1500-1700 | Solid, beatable          |
+| 11258-64x6-SE  | 64x6 SE   | ~2000-2100 | Strong amateur           |
+| Ender v2       | 112x9 SE  | ~2200-2300 | Endgame specialist       |
+| 11258-112x9-SE | 112x9 SE  | ~2250-2350 | Near-master              |
+| Bad Gyal 8     | 128x10 SE | ~2300-2450 | Aggressive, human-like   |
 
-## Expanding the ESLint configuration
+All Elo ratings are approximate at depth 0 (policy head only, no search).
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Setup
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+### ONNX Models
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Place pre-converted ONNX model files in `public/models/`. Models are not included in the repo due to size.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+To convert Lc0 networks to ONNX format:
+
+```bash
+lc0 leela2onnx --input=<weights-file> --output=<output.onnx>
 ```
+
+## Tech Stack
+
+- React + TypeScript + Vite
+- [chess.js](https://github.com/jhlywa/chess.js) — Move validation and game logic
+- [react-chessboard](https://github.com/Clariity/react-chessboard) — Board UI
+- [onnxruntime-web](https://github.com/microsoft/onnxruntime) — Neural network inference (WebGPU + WASM)
+- [idb](https://github.com/nicedoc/idb) — IndexedDB model caching
+- Tailwind CSS

@@ -12,6 +12,7 @@
   "dependencies": {
     "chess.js": "^1.4.0",
     "idb": "^8.0.3",
+    "lucide-react": "^0.563.0",
     "onnxruntime-web": "^1.24.1",
     "react": "^19.2.0",
     "react-chessboard": "^5.8.6",

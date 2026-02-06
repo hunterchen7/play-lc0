@@ -69,7 +69,7 @@ export function Board({ position, onPieceDrop, boardOrientation, disabled }: Boa
       try {
         const chess = new Chess(position)
         const p = chess.get(square as any)
-        return p !== null && p.color === chess.turn()
+        return !!p && p.color === chess.turn()
       } catch {
         return false
       }
@@ -137,7 +137,6 @@ export function Board({ position, onPieceDrop, boardOrientation, disabled }: Boa
           onPieceDrop,
           onSquareClick: handleSquareClick,
           boardOrientation,
-          boardWidth: boardSize,
           allowDragging: !disabled,
           animationDurationInMs: 200,
           squareStyles,
