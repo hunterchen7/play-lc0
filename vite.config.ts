@@ -10,16 +10,20 @@ export default defineConfig({
     viteStaticCopy({
       targets: [
         {
-          src: 'node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded*.wasm',
+          // Use JSEP build with WebGPU support (24 MB, just under 25 MB limit)
+          src: 'node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.wasm',
           dest: '.',
         },
         {
-          src: 'node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded*.mjs',
+          src: 'node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.mjs',
           dest: '.',
         },
       ],
     }),
   ],
+  resolve: {
+    conditions: ['onnxruntime-web-use-extern-wasm'],
+  },
   optimizeDeps: {
     exclude: ['onnxruntime-web'],
   },

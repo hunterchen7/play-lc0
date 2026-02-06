@@ -126,7 +126,7 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
 
   const handleDownload = useCallback(async (net: NetworkInfo) => {
     const cacheKey = modelUrl(net.file);
-    const downloadUrl = cacheKey + ".bin";
+    const downloadUrl = net.url || cacheKey + ".bin";
     setDownloading((prev) => new Map(prev).set(net.id, 0));
 
     try {

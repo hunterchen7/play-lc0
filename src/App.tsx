@@ -21,6 +21,7 @@ export interface NetworkInfo {
   elo: string;
   description: string;
   source: string;
+  url?: string; // Optional: external URL for downloading the model
 }
 
 export const NETWORKS: NetworkInfo[] = [
