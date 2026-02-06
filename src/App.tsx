@@ -379,9 +379,9 @@ export const NETWORKS: NetworkInfo[] = [
     file: "maia2200-64x6-hunter-20000.onnx.bin",
     size: "3.3 MB",
     downloadSize: "2.3 MB",
-    elo: "2200",
+    elo: "~2000",
     description:
-      "Maia 2200 fine-tuned on ~2000 of my online blitz and rapid games (20k steps, batch 128).",
+      "Maia 2200 fine-tuned on ~2000 of my online blitz and rapid games (20k steps, batch 128). Sadly this seems to have made it a little dumber.",
     source: "Custom fine-tuned model",
   },
   // ── Master ───────────────────────────────────────────────────────
@@ -735,6 +735,7 @@ interface GameConfig {
   network: NetworkInfo;
   playerColor: "w" | "b";
   temperature: number;
+  savedGame?: SavedGame; // Optional: restore from saved game
 }
 
 export default function App() {
@@ -743,8 +744,8 @@ export default function App() {
   if (!gameConfig) {
     return (
       <NetworkPicker
-        onStart={(network, color, temperature) =>
-          setGameConfig({ network, playerColor: color, temperature })
+        onStart={(network, color, temperature, savedGame) =>
+          setGameConfig({ network, playerColor: color, temperature, savedGame })
         }
       />
     );
@@ -760,6 +761,7 @@ export default function App() {
 }
 
 export interface SavedGame {
+  id: string;
   date: string;
   network: string;
   playerColor: "w" | "b";
@@ -778,9 +780,41 @@ export function getSavedGames(): SavedGame[] {
 
 function saveGame(game: SavedGame) {
   const games = getSavedGames();
-  games.unshift(game);
+  const existingIndex = games.findIndex((g) => g.id === game.id);
+
+  if (existingIndex >= 0) {
+    // Update existing game
+    games[existingIndex] = game;
+  } else {
+    // Add new game
+    games.unshift(game);
+  }
+
   // Keep last 50 games
   localStorage.setItem("lc0-games", JSON.stringify(games.slice(0, 50)));
+}
+
+function saveOrUpdateCurrentGame(
+  gameId: string,
+  moves: string[],
+  config: GameConfig,
+  playerColor: "w" | "b",
+  currentGame: Chess,
+) {
+  if (moves.length === 0) return; // Don't save empty games
+
+  const result = currentGame.isGameOver() ? getResult(currentGame) : "*";
+  const pgn = buildPgn(moves, config, result, playerColor);
+
+  saveGame({
+    id: gameId,
+    date: new Date().toISOString(),
+    network: config.network.name,
+    playerColor,
+    result,
+    pgn,
+    moves,
+  });
 }
 
 function buildPgn(
@@ -795,7 +829,7 @@ function buildPgn(
   const black = actualPlayerColor === "b" ? "You" : config.network.name;
 
   let pgn = `[Event "Play Lc0"]\n`;
-  pgn += `[Site "Browser"]\n`;
+  pgn += `[Site "play-lc0.pages.dev"]\n`;
   pgn += `[Date "${dateStr}"]\n`;
   pgn += `[White "${white}"]\n`;
   pgn += `[Black "${black}"]\n`;
@@ -823,14 +857,37 @@ function GameScreen({
   config: GameConfig;
   onBackToMenu: () => void;
 }) {
-  const [game, setGame] = useState(new Chess());
+  const [gameId] = useState(
+    () => config.savedGame?.id || `game-${Date.now()}-${Math.random()}`,
+  );
+  const [game, setGame] = useState(() => {
+    if (config.savedGame) {
+      const chess = new Chess();
+      config.savedGame.moves.forEach((move) => chess.move(move));
+      return chess;
+    }
+    return new Chess();
+  });
   const [engineState, setEngineState] =
     useState<EngineState>(INITIAL_ENGINE_STATE);
   const [boardOrientation, setBoardOrientation] = useState<"white" | "black">(
     config.playerColor === "w" ? "white" : "black",
   );
-  const [fenHistory, setFenHistory] = useState<string[]>([new Chess().fen()]);
-  const [moveHistory, setMoveHistory] = useState<string[]>([]); // SAN moves
+  const [fenHistory, setFenHistory] = useState<string[]>(() => {
+    if (config.savedGame) {
+      const fens = [new Chess().fen()];
+      const chess = new Chess();
+      config.savedGame.moves.forEach((move) => {
+        chess.move(move);
+        fens.push(chess.fen());
+      });
+      return fens;
+    }
+    return [new Chess().fen()];
+  });
+  const [moveHistory, setMoveHistory] = useState<string[]>(
+    () => config.savedGame?.moves || [],
+  );
   const [lastMoveAlgebraic, setLastMoveAlgebraic] = useState<string | null>(
     null,
   );
@@ -923,7 +980,18 @@ function GameScreen({
 
         if (move) {
           setLastMoveAlgebraic(move.san);
-          setMoveHistory((prev) => [...prev, move.san]);
+          setMoveHistory((prev) => {
+            const newMoves = [...prev, move.san];
+            // Auto-save after every move
+            saveOrUpdateCurrentGame(
+              gameId,
+              newMoves,
+              config,
+              playerColor,
+              newGame,
+            );
+            return newMoves;
+          });
           setGame(newGame);
           setFenHistory((prev) => [...prev, newGame.fen()]);
         }
@@ -955,12 +1023,13 @@ function GameScreen({
     requestEngineMove,
   ]);
 
-  // Save game to localStorage when game is over
+  // Auto-save game on completion (final update with actual result)
   useEffect(() => {
     if (game.isGameOver() && !gameSaved && moveHistory.length > 0) {
       const result = getResult(game);
       const pgn = buildPgn(moveHistory, config, result, playerColor);
       saveGame({
+        id: gameId,
         date: new Date().toISOString(),
         network: config.network.name,
         playerColor: playerColor,
@@ -970,7 +1039,7 @@ function GameScreen({
       });
       setGameSaved(true);
     }
-  }, [game, gameSaved, moveHistory, config, playerColor]);
+  }, [game, gameSaved, moveHistory, config, playerColor, gameId]);
 
   // Check if a move is a pawn promotion
   const isPromotion = useCallback(
@@ -998,11 +1067,16 @@ function GameScreen({
       });
       setPendingPromotion(null);
       if (!move) return;
-      setMoveHistory((prev) => [...prev, move.san]);
+      setMoveHistory((prev) => {
+        const newMoves = [...prev, move.san];
+        // Auto-save after promotion
+        saveOrUpdateCurrentGame(gameId, newMoves, config, playerColor, newGame);
+        return newMoves;
+      });
       setGame(newGame);
       setFenHistory((prev) => [...prev, newGame.fen()]);
     },
-    [game, pendingPromotion],
+    [game, pendingPromotion, gameId, config, playerColor],
   );
 
   // Handle player piece drop
@@ -1047,7 +1121,12 @@ function GameScreen({
 
       if (!move) return false;
 
-      setMoveHistory((prev) => [...prev, move.san]);
+      setMoveHistory((prev) => {
+        const newMoves = [...prev, move.san];
+        // Auto-save after every move
+        saveOrUpdateCurrentGame(gameId, newMoves, config, playerColor, newGame);
+        return newMoves;
+      });
       setGame(newGame);
       setFenHistory((prev) => [...prev, newGame.fen()]);
 
@@ -1064,6 +1143,21 @@ function GameScreen({
   );
 
   const handleNewGame = useCallback(() => {
+    // Save current game as resignation before starting new game
+    if (moveHistory.length > 0 && !game.isGameOver()) {
+      const resignResult = playerColor === "w" ? "0-1" : "1-0";
+      const pgn = buildPgn(moveHistory, config, resignResult, playerColor);
+      saveGame({
+        id: gameId,
+        date: new Date().toISOString(),
+        network: config.network.name,
+        playerColor,
+        result: resignResult,
+        pgn,
+        moves: moveHistory,
+      });
+    }
+
     const newColor = playerColor === "w" ? "b" : "w";
     setPlayerColor(newColor);
     setBoardOrientation(newColor === "w" ? "white" : "black");
@@ -1089,6 +1183,14 @@ function GameScreen({
     setBoardOrientation((prev) => (prev === "white" ? "black" : "white"));
   }, []);
 
+  const handleBackToMenu = useCallback(() => {
+    // Save incomplete game before going back to menu
+    if (moveHistory.length > 0 && !gameSaved) {
+      saveOrUpdateCurrentGame(gameId, moveHistory, config, playerColor, game);
+    }
+    onBackToMenu();
+  }, [moveHistory, gameSaved, gameId, config, playerColor, game, onBackToMenu]);
+
   const handleResign = useCallback(() => {
     if (game.isGameOver() || gameSaved || hasResigned) return;
 
@@ -1097,6 +1199,7 @@ function GameScreen({
     const pgn = buildPgn(moveHistory, config, resignResult, playerColor);
 
     saveGame({
+      id: gameId,
       date: new Date().toISOString(),
       network: config.network.name,
       playerColor: playerColor,
@@ -1106,7 +1209,7 @@ function GameScreen({
     });
     setGameSaved(true);
     setHasResigned(true);
-  }, [game, gameSaved, hasResigned, playerColor, moveHistory, config]);
+  }, [game, gameSaved, hasResigned, playerColor, moveHistory, config, gameId]);
 
   const isEnginesTurn = game.turn() !== playerColor;
   const disabled =
@@ -1224,7 +1327,7 @@ function GameScreen({
             Resign
           </button>
           <button
-            onClick={onBackToMenu}
+            onClick={handleBackToMenu}
             className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-gray-300 rounded-lg font-medium transition-colors text-sm"
           >
             Change Opponent

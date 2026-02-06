@@ -36,6 +36,7 @@ interface NetworkPickerProps {
     network: NetworkInfo,
     color: "w" | "b",
     temperature: number,
+    savedGame?: SavedGame,
   ) => void;
 }
 
@@ -223,260 +224,264 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
   return (
     <>
       {/* First section: Network picker and controls */}
-      <div className="flex flex-col items-center gap-6 p-8 max-w-2xl mx-auto">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold text-gray-100 mb-2">Play Lc0</h1>
-          <p className="text-gray-400">
-            Chess with neural networks — depth 0 (policy head only, no search)
-          </p>
-        </div>
-        {/* Network selection */}
-        <div className="w-full">
-          <h2 className="text-lg font-semibold text-gray-200 mb-3">
-            Choose your opponent
-          </h2>
-
-          {/* Search bar */}
-          <input
-            type="text"
-            placeholder="Search networks..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full px-3 py-2 mb-3 bg-slate-800 border border-slate-700 rounded-lg text-gray-200 placeholder-gray-500 focus:outline-none focus:border-emerald-500 transition-colors text-sm"
-          />
-
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-xs text-gray-500">
-              {sortedNetworks.length}{" "}
-              {sortedNetworks.length === 1 ? "network" : "networks"}
-            </div>
-            <div className="flex items-center gap-1 text-xs">
-              <span className="text-gray-500 mr-1">Sort:</span>
-              <button
-                onClick={() => toggleSort("elo")}
-                className={`px-2 py-1 rounded transition-colors font-medium ${
-                  sortColumn === "elo"
-                    ? "bg-emerald-800/60 text-emerald-300"
-                    : "text-gray-400 hover:text-gray-200"
-                }`}
-              >
-                Elo{sortIndicator("elo")}
-              </button>
-              <button
-                onClick={() => toggleSort("size")}
-                className={`px-2 py-1 rounded transition-colors font-medium ${
-                  sortColumn === "size"
-                    ? "bg-emerald-800/60 text-emerald-300"
-                    : "text-gray-400 hover:text-gray-200"
-                }`}
-              >
-                Size{sortIndicator("size")}
-              </button>
-            </div>
+      <div className="flex flex-col md:flex-row items-center gap-6 p-8 mx-auto flex-around">
+        <div className="flex flex-col md:max-w-2xl">
+          <div className="text-center">
+            <h1 className="text-4xl font-bold text-gray-100 mb-2">Play Lc0</h1>
+            <p className="text-gray-400">
+              Chess with neural networks — depth 0 (policy head only, no search)
+            </p>
           </div>
-          <div className="grid gap-2 max-h-[55vh] overflow-y-auto overflow-x-hidden">
-            {sortedNetworks.map((net) => {
-              const isCached = cachedModels.has(net.id);
-              const dlProgress = downloading.get(net.id);
-              const isDownloading = dlProgress !== undefined;
+          {/* Network selection */}
+          <div className="w-full">
+            <h2 className="text-lg font-semibold text-gray-200 mb-3">
+              Choose your opponent
+            </h2>
 
-              return (
-                <div
-                  key={net.id}
-                  className={`relative w-full text-left rounded-lg border transition-colors ${
-                    selected.id === net.id
-                      ? "border-emerald-500 bg-emerald-900/30"
-                      : "border-slate-700 bg-slate-800/50 hover:border-slate-500"
+            {/* Search bar */}
+            <input
+              type="text"
+              placeholder="Search networks..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full px-3 py-2 mb-3 bg-slate-800 border border-slate-700 rounded-lg text-gray-200 placeholder-gray-500 focus:outline-none focus:border-emerald-500 transition-colors text-sm"
+            />
+
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-xs text-gray-500">
+                {sortedNetworks.length}{" "}
+                {sortedNetworks.length === 1 ? "network" : "networks"}
+              </div>
+              <div className="flex items-center gap-1 text-xs">
+                <span className="text-gray-500 mr-1">Sort:</span>
+                <button
+                  onClick={() => toggleSort("elo")}
+                  className={`px-2 py-1 rounded transition-colors font-medium ${
+                    sortColumn === "elo"
+                      ? "bg-emerald-800/60 text-emerald-300"
+                      : "text-gray-400 hover:text-gray-200"
                   }`}
                 >
-                  {/* Download progress bar */}
-                  {isDownloading && (
-                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-slate-700 rounded-b-lg overflow-hidden">
-                      <div
-                        className="h-full bg-emerald-500 transition-all duration-150"
-                        style={{ width: `${dlProgress * 100}%` }}
-                      />
-                    </div>
-                  )}
-                  <div className="flex items-stretch">
-                    <button
-                      onClick={() => setSelected(net)}
-                      className="flex-1 text-left px-4 py-3 min-w-0"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-gray-100">
-                            {net.name}
-                          </span>
-                          <a
-                            href={net.source}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="text-gray-500 hover:text-gray-300 transition-colors"
-                            title="View original weights source"
-                          >
-                            <ExternalLink size={13} />
-                          </a>
-                        </div>
-                        <div className="flex items-baseline gap-3">
-                          <span className="text-xs text-gray-400">
-                            {net.arch}
-                          </span>
-                          <span className="text-xs text-emerald-400 font-mono">
-                            {net.elo}
-                          </span>
-                          <span className="relative group/size">
-                            <span className="text-xs text-gray-300 font-mono cursor-help">
-                              {net.downloadSize}
-                            </span>
-                            <span className="absolute top-0 right-full mr-2 px-2.5 py-1.5 bg-slate-700 border border-slate-600 text-xs text-gray-200 rounded-md whitespace-nowrap opacity-0 pointer-events-none group-hover/size:opacity-100 transition-opacity duration-150 shadow-lg z-50">
-                              Download: {net.downloadSize} (compressed)
-                              <br />
-                              On disk: {net.size} (uncompressed)
-                            </span>
-                          </span>
-                        </div>
-                      </div>
-                      <p className="text-sm text-gray-400 mt-1">
-                        {net.description}
-                      </p>
-                    </button>
-                    <div className="flex items-center px-2 shrink-0 group/icons">
-                      {isDownloading ? (
+                  Elo{sortIndicator("elo")}
+                </button>
+                <button
+                  onClick={() => toggleSort("size")}
+                  className={`px-2 py-1 rounded transition-colors font-medium ${
+                    sortColumn === "size"
+                      ? "bg-emerald-800/60 text-emerald-300"
+                      : "text-gray-400 hover:text-gray-200"
+                  }`}
+                >
+                  Size{sortIndicator("size")}
+                </button>
+              </div>
+            </div>
+            <div className="grid gap-2 max-h-[55vh] overflow-y-auto overflow-x-hidden rounded-lg">
+              {sortedNetworks.map((net) => {
+                const isCached = cachedModels.has(net.id);
+                const dlProgress = downloading.get(net.id);
+                const isDownloading = dlProgress !== undefined;
+
+                return (
+                  <div
+                    key={net.id}
+                    className={`relative w-full text-left rounded-lg border transition-colors min-h-24 ${
+                      selected.id === net.id
+                        ? "border-emerald-500 bg-emerald-900/30"
+                        : "border-slate-700 bg-slate-800/50 hover:border-slate-500"
+                    }`}
+                  >
+                    {/* Download progress bar */}
+                    {isDownloading && (
+                      <div className="absolute bottom-0 left-0 right-0 h-1 bg-slate-700 rounded-b-lg overflow-hidden">
                         <div
-                          className="p-1.5 text-emerald-400"
-                          title="Downloading..."
-                        >
-                          <Loader2 size={18} className="animate-spin" />
-                        </div>
-                      ) : isCached ? (
-                        <>
-                          <div
-                            className="p-1.5 text-emerald-400 group-hover/icons:hidden"
-                            title="Downloaded"
-                          >
-                            <Check size={18} />
+                          className="h-full bg-emerald-500 transition-all duration-150"
+                          style={{ width: `${dlProgress * 100}%` }}
+                        />
+                      </div>
+                    )}
+                    <div className="flex items-stretch">
+                      <button
+                        onClick={() => setSelected(net)}
+                        className="flex-1 text-left px-4 py-3 min-w-0"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-gray-100">
+                              {net.name}
+                            </span>
+                            <a
+                              href={net.source}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-gray-500 hover:text-gray-300 transition-colors"
+                              title="View original weights source"
+                            >
+                              <ExternalLink size={13} />
+                            </a>
                           </div>
+                          <div className="flex items-baseline gap-3">
+                            <span className="text-xs text-gray-400">
+                              {net.arch}
+                            </span>
+                            <span className="text-xs text-emerald-400 font-mono">
+                              {net.elo}
+                            </span>
+                            <span className="relative group/size">
+                              <span className="text-xs text-gray-300 font-mono cursor-help">
+                                {net.downloadSize}
+                              </span>
+                              <span className="absolute top-0 right-full mr-2 px-2.5 py-1.5 bg-slate-700 border border-slate-600 text-xs text-gray-200 rounded-md whitespace-nowrap opacity-0 pointer-events-none group-hover/size:opacity-100 transition-opacity duration-150 shadow-lg z-50">
+                                Download: {net.downloadSize} (compressed)
+                                <br />
+                                On disk: {net.size} (uncompressed)
+                              </span>
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-sm text-gray-400 mt-1">
+                          {net.description}
+                        </p>
+                      </button>
+                      <div className="flex items-center px-2 shrink-0 group/icons">
+                        {isDownloading ? (
+                          <div
+                            className="p-1.5 text-emerald-400"
+                            title="Downloading..."
+                          >
+                            <Loader2 size={18} className="animate-spin" />
+                          </div>
+                        ) : isCached ? (
+                          <>
+                            <div
+                              className="p-1.5 text-emerald-400 group-hover/icons:hidden"
+                              title="Downloaded"
+                            >
+                              <Check size={18} />
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteConfirm(net);
+                              }}
+                              className="p-1.5 text-gray-500 hover:text-red-400 transition-colors hidden group-hover/icons:block"
+                              title="Delete from cache"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </>
+                        ) : (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              setDeleteConfirm(net);
+                              if (isLargeModel(net)) {
+                                setDownloadConfirm(net);
+                              } else {
+                                handleDownload(net);
+                              }
                             }}
-                            className="p-1.5 text-gray-500 hover:text-red-400 transition-colors hidden group-hover/icons:block"
-                            title="Delete from cache"
+                            className="p-1.5 text-gray-400 hover:text-emerald-400 transition-colors"
+                            title={`Download ${net.size}`}
                           >
-                            <Trash2 size={18} />
+                            <Download size={18} />
                           </button>
-                        </>
-                      ) : (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (isLargeModel(net)) {
-                              setDownloadConfirm(net);
-                            } else {
-                              handleDownload(net);
-                            }
-                          }}
-                          className="p-1.5 text-gray-400 hover:text-emerald-400 transition-colors"
-                          title={`Download ${net.size}`}
-                        >
-                          <Download size={18} />
-                        </button>
-                      )}
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-          {cachedModels.size >= 2 && (
-            <button
-              onClick={() => setDeleteConfirm("all")}
-              className="mt-2 flex items-center gap-1.5 text-xs text-gray-500 hover:text-red-400 transition-colors ml-auto"
-            >
-              <Trash2 size={14} />
-              Delete all models ({totalCachedSize.toFixed(1)} MB)
-            </button>
-          )}
-        </div>
-        {/* Color selection */}
-        <div className="w-full">
-          <h2 className="text-lg font-semibold text-gray-200 mb-3">Play as</h2>
-          <div className="flex gap-3">
-            <button
-              onClick={() => setColor("w")}
-              className={`flex-1 py-3 rounded-lg font-semibold text-lg transition-colors ${
-                color === "w"
-                  ? "bg-white text-gray-900"
-                  : "bg-slate-700 text-gray-400 hover:bg-slate-600"
-              }`}
-            >
-              White
-            </button>
-            <button
-              onClick={() => setColor("random")}
-              className={`flex-1 py-3 rounded-lg font-semibold text-lg transition-colors ${
-                color === "random"
-                  ? "bg-emerald-600 text-white"
-                  : "bg-slate-700 text-gray-400 hover:bg-slate-600"
-              }`}
-            >
-              Random
-            </button>
-            <button
-              onClick={() => setColor("b")}
-              className={`flex-1 py-3 rounded-lg font-semibold text-lg transition-colors ${
-                color === "b"
-                  ? "bg-gray-800 text-white border-2 border-gray-400"
-                  : "bg-slate-700 text-gray-400 hover:bg-slate-600"
-              }`}
-            >
-              Black
-            </button>
-          </div>
-        </div>
-        {/* Temperature */}
-        <div className="w-full">
-          <h2 className="text-lg font-semibold text-gray-200 mb-3">
-            Temperature
-          </h2>
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-3">
-              <input
-                type="range"
-                min="0"
-                max="2"
-                step="0.05"
-                value={temperature}
-                onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                className="flex-1 accent-emerald-500"
-              />
-              <span className="text-gray-300 font-mono text-sm w-20 text-right">
-                {temperature === 0 ? "Off" : temperature.toFixed(2)}
-              </span>
+                );
+              })}
             </div>
-            <div className="flex justify-between text-xs text-gray-500">
-              <span>Best move</span>
-              <span>More random</span>
+            {cachedModels.size >= 2 && (
+              <button
+                onClick={() => setDeleteConfirm("all")}
+                className="mt-2 flex items-center gap-1.5 text-xs text-gray-500 hover:text-red-400 transition-colors ml-auto"
+              >
+                <Trash2 size={14} />
+                Delete all models ({totalCachedSize.toFixed(1)} MB)
+              </button>
+            )}
+          </div>
+          {/* Color selection */}
+          <div className="w-full">
+            <h2 className="text-lg font-semibold text-gray-200 mb-3 mt-3">
+              Play as
+            </h2>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setColor("w")}
+                className={`flex-1 py-3 rounded-lg font-semibold text-lg transition-colors ${
+                  color === "w"
+                    ? "bg-white text-gray-900"
+                    : "bg-slate-700 text-gray-400 hover:bg-slate-600"
+                }`}
+              >
+                White
+              </button>
+              <button
+                onClick={() => setColor("random")}
+                className={`flex-1 py-3 rounded-lg font-semibold text-lg transition-colors ${
+                  color === "random"
+                    ? "bg-emerald-600 text-white"
+                    : "bg-slate-700 text-gray-400 hover:bg-slate-600"
+                }`}
+              >
+                Random
+              </button>
+              <button
+                onClick={() => setColor("b")}
+                className={`flex-1 py-3 rounded-lg font-semibold text-lg transition-colors ${
+                  color === "b"
+                    ? "bg-gray-800 text-white border-2 border-gray-400"
+                    : "bg-slate-700 text-gray-400 hover:bg-slate-600"
+                }`}
+              >
+                Black
+              </button>
             </div>
           </div>
+          {/* Temperature */}
+          <div className="w-full">
+            <h2 className="text-lg font-semibold text-gray-200 mb-3">
+              Temperature
+            </h2>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min="0"
+                  max="2"
+                  step="0.05"
+                  value={temperature}
+                  onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                  className="flex-1 accent-emerald-500"
+                />
+                <span className="text-gray-300 font-mono text-sm w-20 text-right">
+                  {temperature === 0 ? "Off" : temperature.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between text-xs text-gray-500">
+                <span>Best move</span>
+                <span>More random</span>
+              </div>
+            </div>
+          </div>
+          {/* Start button */}
+          <button
+            onClick={handleStart}
+            disabled={!selectedIsCached}
+            className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-700 disabled:text-gray-500 text-white text-xl font-semibold rounded-xl transition-colors"
+          >
+            {selectedIsCached
+              ? `Play vs ${selected.name}`
+              : `${selected.name} not downloaded`}
+          </button>
         </div>
-        {/* Start button */}
-        <button
-          onClick={handleStart}
-          disabled={!selectedIsCached}
-          className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-700 disabled:text-gray-500 text-white text-xl font-semibold rounded-xl transition-colors"
-        >
-          {selectedIsCached
-            ? `Play vs ${selected.name}`
-            : `${selected.name} not downloaded`}
-        </button>
 
         {/* Second section: Game History */}
-        <div className="w-full">
-          <GameHistory />
+        <div className="w-full md:max-w-2xl">
+          <GameHistory onContinue={onStart} />
         </div>
       </div>
 
@@ -597,7 +602,16 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
   );
 }
 
-function GameHistory() {
+function GameHistory({
+  onContinue,
+}: {
+  onContinue: (
+    network: NetworkInfo,
+    color: "w" | "b",
+    temperature: number,
+    savedGame?: SavedGame,
+  ) => void;
+}) {
   const games = getSavedGames();
   const [expandedGames, setExpandedGames] = useState<Set<number>>(new Set());
 
@@ -652,9 +666,33 @@ function GameHistory() {
                   </span>
                 </div>
                 <div className="flex items-baseline gap-3">
-                  <span className={`text-sm font-medium ${resultColor(game)}`}>
-                    {resultLabel(game)}
-                  </span>
+                  {game.result === "*" ? (
+                    <div className="group/continue flex items-baseline gap-3">
+                      <span className="text-sm font-medium text-gray-400 group-hover/continue:hidden">
+                        Incomplete
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const network = NETWORKS.find(
+                            (n) => n.name === game.network,
+                          );
+                          if (network) {
+                            onContinue(network, game.playerColor, 0.15, game);
+                          }
+                        }}
+                        className="hidden group-hover/continue:block text-sm font-medium text-emerald-400 hover:text-emerald-300 transition-colors"
+                      >
+                        Continue →
+                      </button>
+                    </div>
+                  ) : (
+                    <span
+                      className={`text-sm font-medium ${resultColor(game)}`}
+                    >
+                      {resultLabel(game)}
+                    </span>
+                  )}
                   <span className="text-xs text-gray-500">
                     {new Date(game.date).toLocaleDateString()}
                   </span>
