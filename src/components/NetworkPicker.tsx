@@ -619,9 +619,9 @@ function GameHistory() {
   };
 
   return (
-    <div className="w-full max-h-[90vh] overflow-y-auto">
+    <div className="w-full">
       <h2 className="text-lg font-semibold text-gray-200 mb-3">Game History</h2>
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2 max-h-[90vh] overflow-y-auto">
         {games.map((game, i) => (
           <div
             key={i}
