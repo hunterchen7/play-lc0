@@ -328,6 +328,17 @@ export const NETWORKS: NetworkInfo[] = [
     description: 'Human-like play at 2200 Lichess rating. Trained to predict human moves, not play optimally.',
     source: 'https://github.com/CallOn84/LeelaNets',
   },
+  {
+    id: 'maia2200-hunter',
+    name: 'Maia 2200 Hunter',
+    arch: '64x6-SE',
+    file: 'maia2200-64x6-hunter-20000.onnx',
+    size: '3.3 MB',
+    downloadSize: '2.3 MB',
+    elo: '2200',
+    description: 'Maia 2200 fine-tuned on Hunter\'s games (20k steps, batch 128). Human-like with personalized style.',
+    source: 'Custom fine-tuned model',
+  },
   // ── Master ───────────────────────────────────────────────────────
   {
     id: 't70-703810',
@@ -654,6 +665,7 @@ function GameScreen({ config, onBackToMenu }: { config: GameConfig; onBackToMenu
   const [temperature, setTemperature] = useState(config.temperature)
   const [viewingMove, setViewingMove] = useState<number | null>(null) // null = live
   const [gameSaved, setGameSaved] = useState(false)
+  const [hasResigned, setHasResigned] = useState(false)
   const [playerColor, setPlayerColor] = useState(config.playerColor)
   const engineRef = useRef<Lc0Engine | null>(null)
 
@@ -746,11 +758,12 @@ function GameScreen({ config, onBackToMenu }: { config: GameConfig; onBackToMenu
       engineState.isReady &&
       !engineState.isThinking &&
       !game.isGameOver() &&
+      !hasResigned &&
       game.turn() !== playerColor
     ) {
       requestEngineMove(game, fenHistory)
     }
-  }, [game, engineState.isReady, engineState.isThinking, playerColor, fenHistory, requestEngineMove])
+  }, [game, engineState.isReady, engineState.isThinking, hasResigned, playerColor, fenHistory, requestEngineMove])
 
   // Save game to localStorage when game is over
   useEffect(() => {
@@ -813,7 +826,7 @@ function GameScreen({ config, onBackToMenu }: { config: GameConfig; onBackToMenu
         return false
       }
 
-      if (engineState.isThinking || game.isGameOver()) return false
+      if (engineState.isThinking || game.isGameOver() || hasResigned) return false
       if (game.turn() !== playerColor) return false
 
       // Check if this is a valid move at all (try with queen promotion)
@@ -845,7 +858,7 @@ function GameScreen({ config, onBackToMenu }: { config: GameConfig; onBackToMenu
 
       return true
     },
-    [game, playerColor, engineState.isThinking, isPromotion, isViewingHistory]
+    [game, playerColor, engineState.isThinking, hasResigned, isPromotion, isViewingHistory]
   )
 
   const handleNewGame = useCallback(() => {
@@ -859,6 +872,7 @@ function GameScreen({ config, onBackToMenu }: { config: GameConfig; onBackToMenu
     setLastMoveAlgebraic(null)
     setViewingMove(null)
     setGameSaved(false)
+    setHasResigned(false)
     setEngineState((prev) => ({
       ...prev,
       lastMove: null,
@@ -874,7 +888,7 @@ function GameScreen({ config, onBackToMenu }: { config: GameConfig; onBackToMenu
   }, [])
 
   const handleResign = useCallback(() => {
-    if (game.isGameOver() || gameSaved) return
+    if (game.isGameOver() || gameSaved || hasResigned) return
 
     // Create a resigned result: if player is white, black wins (0-1), else white wins (1-0)
     const resignResult = playerColor === 'w' ? '0-1' : '1-0'
@@ -889,20 +903,14 @@ function GameScreen({ config, onBackToMenu }: { config: GameConfig; onBackToMenu
       moves: moveHistory,
     })
     setGameSaved(true)
-
-    // Force game over state by creating a new game with same position but marked as over
-    const currentFen = game.fen()
-    const resignedGame = new Chess(currentFen)
-    // Set game to a state that makes isGameOver return true
-    // We'll use the existing game but mark it as saved
-    setGame(resignedGame)
-  }, [game, gameSaved, playerColor, moveHistory, config])
+    setHasResigned(true)
+  }, [game, gameSaved, hasResigned, playerColor, moveHistory, config])
 
   const isEnginesTurn = game.turn() !== playerColor
-  const disabled = isViewingHistory || isEnginesTurn || engineState.isThinking || game.isGameOver() || !engineState.isReady
+  const disabled = isViewingHistory || isEnginesTurn || engineState.isThinking || game.isGameOver() || hasResigned || !engineState.isReady
 
-  const gameOver = game.isGameOver()
-  const pgn = gameOver ? buildPgn(moveHistory, config, getResult(game), playerColor) : null
+  const gameOver = game.isGameOver() || hasResigned
+  const pgn = gameOver ? buildPgn(moveHistory, config, hasResigned ? (playerColor === 'w' ? '0-1' : '1-0') : getResult(game), playerColor) : null
 
   return (
     <div className="flex flex-col items-center gap-6 p-8">
@@ -988,7 +996,7 @@ function GameScreen({ config, onBackToMenu }: { config: GameConfig; onBackToMenu
           />
           <button
             onClick={handleResign}
-            disabled={gameOver || isViewingHistory || gameSaved}
+            disabled={gameOver || isViewingHistory}
             className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-slate-700 disabled:text-gray-500 text-white rounded-lg font-medium transition-colors text-sm"
           >
             Resign
