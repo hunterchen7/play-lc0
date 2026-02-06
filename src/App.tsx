@@ -6,6 +6,7 @@ import { Controls } from './components/Controls'
 import { StatusBar } from './components/StatusBar'
 import { LoadingOverlay } from './components/LoadingOverlay'
 import { NetworkPicker } from './components/NetworkPicker'
+import { MoveHistory } from './components/MoveHistory'
 import { Lc0Engine } from './engine/workerInterface'
 import { getLegalMovesUCI, uciToChessJsMove } from './utils/chess'
 import type { EngineState } from './types'
@@ -140,6 +141,58 @@ export default function App() {
   )
 }
 
+interface SavedGame {
+  date: string
+  network: string
+  playerColor: 'w' | 'b'
+  result: string
+  pgn: string
+  moves: string[]
+}
+
+function getSavedGames(): SavedGame[] {
+  try {
+    return JSON.parse(localStorage.getItem('lc0-games') || '[]')
+  } catch {
+    return []
+  }
+}
+
+function saveGame(game: SavedGame) {
+  const games = getSavedGames()
+  games.unshift(game)
+  // Keep last 50 games
+  localStorage.setItem('lc0-games', JSON.stringify(games.slice(0, 50)))
+}
+
+function buildPgn(moves: string[], config: GameConfig, result: string): string {
+  const date = new Date()
+  const dateStr = `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`
+  const white = config.playerColor === 'w' ? 'You' : config.network.name
+  const black = config.playerColor === 'b' ? 'You' : config.network.name
+
+  let pgn = `[Event "Play Lc0"]\n`
+  pgn += `[Site "Browser"]\n`
+  pgn += `[Date "${dateStr}"]\n`
+  pgn += `[White "${white}"]\n`
+  pgn += `[Black "${black}"]\n`
+  pgn += `[Result "${result}"]\n\n`
+
+  for (let i = 0; i < moves.length; i++) {
+    if (i % 2 === 0) pgn += `${Math.floor(i / 2) + 1}. `
+    pgn += `${moves[i]} `
+  }
+  pgn += result
+
+  return pgn
+}
+
+function getResult(game: Chess): string {
+  if (!game.isGameOver()) return '*'
+  if (game.isCheckmate()) return game.turn() === 'w' ? '0-1' : '1-0'
+  return '1/2-1/2'
+}
+
 function GameScreen({ config, onBackToMenu }: { config: GameConfig; onBackToMenu: () => void }) {
   const [game, setGame] = useState(new Chess())
   const [engineState, setEngineState] = useState<EngineState>(INITIAL_ENGINE_STATE)
@@ -147,12 +200,50 @@ function GameScreen({ config, onBackToMenu }: { config: GameConfig; onBackToMenu
     config.playerColor === 'w' ? 'white' : 'black'
   )
   const [fenHistory, setFenHistory] = useState<string[]>([new Chess().fen()])
+  const [moveHistory, setMoveHistory] = useState<string[]>([]) // SAN moves
   const [lastMoveAlgebraic, setLastMoveAlgebraic] = useState<string | null>(null)
   const [pendingPromotion, setPendingPromotion] = useState<{ from: string; to: string } | null>(null)
   const [temperature, setTemperature] = useState(config.temperature)
-
-  const playerColor = config.playerColor
+  const [viewingMove, setViewingMove] = useState<number | null>(null) // null = live
+  const [gameSaved, setGameSaved] = useState(false)
+  const [playerColor, setPlayerColor] = useState(config.playerColor)
   const engineRef = useRef<Lc0Engine | null>(null)
+
+  // The position to show on the board
+  // viewingMove is the move index (0-based), fenHistory[0] is start pos, fenHistory[moveIndex+1] is pos after that move
+  // viewingMove = -1 means start position, null means live
+  const displayFen = viewingMove === null
+    ? game.fen()
+    : fenHistory[viewingMove + 1] ?? fenHistory[0]
+  const isViewingHistory = viewingMove !== null
+
+  // Arrow key navigation for move history
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (moveHistory.length === 0) return
+      const current = viewingMove ?? moveHistory.length - 1
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        setViewingMove(Math.max(-1, current - 1))
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        if (current < moveHistory.length - 1) {
+          setViewingMove(current + 1)
+        } else {
+          setViewingMove(null)
+        }
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setViewingMove(-1)
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setViewingMove(null)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [moveHistory.length, viewingMove])
 
   // Initialize engine with selected model
   useEffect(() => {
@@ -190,6 +281,7 @@ function GameScreen({ config, onBackToMenu }: { config: GameConfig; onBackToMenu
 
         if (move) {
           setLastMoveAlgebraic(move.san)
+          setMoveHistory((prev) => [...prev, move.san])
           setGame(newGame)
           setFenHistory((prev) => [...prev, newGame.fen()])
         }
@@ -211,6 +303,23 @@ function GameScreen({ config, onBackToMenu }: { config: GameConfig; onBackToMenu
       requestEngineMove(game, fenHistory)
     }
   }, [game, engineState.isReady, engineState.isThinking, playerColor, fenHistory, requestEngineMove])
+
+  // Save game to localStorage when game is over
+  useEffect(() => {
+    if (game.isGameOver() && !gameSaved && moveHistory.length > 0) {
+      const result = getResult(game)
+      const pgn = buildPgn(moveHistory, config, result)
+      saveGame({
+        date: new Date().toISOString(),
+        network: config.network.name,
+        playerColor: config.playerColor,
+        result,
+        pgn,
+        moves: moveHistory,
+      })
+      setGameSaved(true)
+    }
+  }, [game, gameSaved, moveHistory, config])
 
   // Check if a move is a pawn promotion
   const isPromotion = useCallback(
@@ -235,6 +344,7 @@ function GameScreen({ config, onBackToMenu }: { config: GameConfig; onBackToMenu
       })
       setPendingPromotion(null)
       if (!move) return
+      setMoveHistory((prev) => [...prev, move.san])
       setGame(newGame)
       setFenHistory((prev) => [...prev, newGame.fen()])
     },
@@ -244,6 +354,7 @@ function GameScreen({ config, onBackToMenu }: { config: GameConfig; onBackToMenu
   // Handle player piece drop
   const onPieceDrop = useCallback(
     ({ piece, sourceSquare, targetSquare }: PieceDropHandlerArgs): boolean => {
+      if (isViewingHistory) return false // can't move while viewing history
       if (!targetSquare) return false
 
       const isWhitePiece = piece.pieceType[0] === 'W' || piece.pieceType[0] === 'w'
@@ -280,19 +391,26 @@ function GameScreen({ config, onBackToMenu }: { config: GameConfig; onBackToMenu
 
       if (!move) return false
 
+      setMoveHistory((prev) => [...prev, move.san])
       setGame(newGame)
       setFenHistory((prev) => [...prev, newGame.fen()])
 
       return true
     },
-    [game, playerColor, engineState.isThinking, isPromotion]
+    [game, playerColor, engineState.isThinking, isPromotion, isViewingHistory]
   )
 
   const handleNewGame = useCallback(() => {
+    const newColor = playerColor === 'w' ? 'b' : 'w'
+    setPlayerColor(newColor)
+    setBoardOrientation(newColor === 'w' ? 'white' : 'black')
     const newGame = new Chess()
     setGame(newGame)
     setFenHistory([newGame.fen()])
+    setMoveHistory([])
     setLastMoveAlgebraic(null)
+    setViewingMove(null)
+    setGameSaved(false)
     setEngineState((prev) => ({
       ...prev,
       lastMove: null,
@@ -301,14 +419,17 @@ function GameScreen({ config, onBackToMenu }: { config: GameConfig; onBackToMenu
       error: null,
       isThinking: false,
     }))
-  }, [])
+  }, [playerColor])
 
   const handleFlipBoard = useCallback(() => {
     setBoardOrientation((prev) => (prev === 'white' ? 'black' : 'white'))
   }, [])
 
   const isEnginesTurn = game.turn() !== playerColor
-  const disabled = isEnginesTurn || engineState.isThinking || game.isGameOver() || !engineState.isReady
+  const disabled = isViewingHistory || isEnginesTurn || engineState.isThinking || game.isGameOver() || !engineState.isReady
+
+  const gameOver = game.isGameOver()
+  const pgn = gameOver ? buildPgn(moveHistory, config, getResult(game)) : null
 
   return (
     <div className="flex flex-col items-center gap-6 p-8">
@@ -324,11 +445,16 @@ function GameScreen({ config, onBackToMenu }: { config: GameConfig; onBackToMenu
         {/* Board with loading overlay */}
         <div className="relative">
           <Board
-            position={game.fen()}
+            position={displayFen}
             onPieceDrop={onPieceDrop}
             boardOrientation={boardOrientation}
             disabled={disabled}
           />
+          {isViewingHistory && (
+            <div className="absolute top-2 left-2 bg-amber-600/90 text-white text-xs px-2 py-1 rounded z-10">
+              Viewing move {(viewingMove ?? 0) + 1} of {moveHistory.length}
+            </div>
+          )}
           {engineState.isLoading && (
             <LoadingOverlay
               progress={engineState.loadingProgress}
@@ -355,17 +481,35 @@ function GameScreen({ config, onBackToMenu }: { config: GameConfig; onBackToMenu
         </div>
 
         {/* Sidebar */}
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 w-64">
           <StatusBar
             engineState={engineState}
             gameStatus={getGameStatus(game)}
             lastMoveAlgebraic={lastMoveAlgebraic}
+            playerColor={playerColor}
           />
+          <MoveHistory
+            moves={moveHistory}
+            viewingMove={viewingMove}
+            onSelectMove={setViewingMove}
+          />
+          {pgn && (
+            <div className="flex flex-col gap-1">
+              <h3 className="text-sm font-semibold text-gray-300">PGN</h3>
+              <pre
+                className="bg-slate-900 rounded-lg p-2 text-xs text-gray-400 whitespace-pre-wrap break-words max-h-32 overflow-y-auto cursor-pointer hover:text-gray-300 transition-colors"
+                onClick={() => navigator.clipboard.writeText(pgn)}
+                title="Click to copy"
+              >
+                {pgn}
+              </pre>
+            </div>
+          )}
           <Controls
             onNewGame={handleNewGame}
             onFlipBoard={handleFlipBoard}
             playerColor={playerColor}
-            isGameOver={game.isGameOver()}
+            isGameOver={gameOver}
             temperature={temperature}
             onTemperatureChange={setTemperature}
           />

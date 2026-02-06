@@ -4,25 +4,30 @@ interface StatusBarProps {
   engineState: EngineState
   gameStatus: string // e.g. "In progress", "Checkmate", "Stalemate", etc.
   lastMoveAlgebraic: string | null // e.g. "Nf3"
+  playerColor: 'w' | 'b'
 }
 
-function WDLBar({ wdl }: { wdl: [number, number, number] }) {
-  const [win, draw, loss] = wdl
-  const winPct = Math.round(win * 100)
+function WDLBar({ wdl, playerColor }: { wdl: [number, number, number]; playerColor: 'w' | 'b' }) {
+  const [engineWin, draw, engineLoss] = wdl
+  // Always show from White's perspective: white bar = white winning, dark bar = black winning
+  const engineIsBlack = playerColor === 'w'
+  const whiteWin = engineIsBlack ? engineLoss : engineWin
+  const blackWin = engineIsBlack ? engineWin : engineLoss
+  const whitePct = Math.round(whiteWin * 100)
   const drawPct = Math.round(draw * 100)
-  const lossPct = Math.round(loss * 100)
+  const blackPct = Math.round(blackWin * 100)
 
   return (
     <div className="mt-2">
       <div className="flex justify-between text-xs text-gray-400 mb-1">
-        <span>W: {winPct}%</span>
-        <span>D: {drawPct}%</span>
-        <span>L: {lossPct}%</span>
+        <span>White: {whitePct}%</span>
+        <span>Draw: {drawPct}%</span>
+        <span>Black: {blackPct}%</span>
       </div>
       <div className="flex h-3 rounded-full overflow-hidden bg-gray-700">
         <div
           className="bg-white transition-all duration-300"
-          style={{ width: `${win * 100}%` }}
+          style={{ width: `${whiteWin * 100}%` }}
         />
         <div
           className="bg-gray-400 transition-all duration-300"
@@ -30,14 +35,14 @@ function WDLBar({ wdl }: { wdl: [number, number, number] }) {
         />
         <div
           className="bg-gray-900 transition-all duration-300"
-          style={{ width: `${loss * 100}%` }}
+          style={{ width: `${blackWin * 100}%` }}
         />
       </div>
     </div>
   )
 }
 
-export function StatusBar({ engineState, gameStatus, lastMoveAlgebraic }: StatusBarProps) {
+export function StatusBar({ engineState, gameStatus, lastMoveAlgebraic, playerColor }: StatusBarProps) {
   return (
     <div className="bg-slate-800 rounded-lg p-4 min-w-[220px]">
       <h3 className="text-lg font-bold text-gray-200 mb-3">Leela Chess Zero</h3>
@@ -72,7 +77,7 @@ export function StatusBar({ engineState, gameStatus, lastMoveAlgebraic }: Status
       )}
 
       {/* WDL Bar */}
-      {engineState.wdl && <WDLBar wdl={engineState.wdl} />}
+      {engineState.wdl && <WDLBar wdl={engineState.wdl} playerColor={playerColor} />}
 
       {/* Error */}
       {engineState.error && (

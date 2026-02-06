@@ -14,3 +14,13 @@ body {
   align-items: center;
   justify-content: center;
 }
+
+button,
+[role="button"],
+input[type="range"] {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}

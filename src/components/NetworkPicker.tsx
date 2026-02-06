@@ -1,5 +1,18 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { NETWORKS, type NetworkInfo } from '../App'
+
+type SortColumn = 'elo' | 'size'
+type SortDirection = 'asc' | 'desc'
+
+function parseElo(elo: string): number {
+  const match = elo.match(/(\d+)/)
+  return match ? parseInt(match[1], 10) : 0
+}
+
+function parseSizeMB(size: string): number {
+  const match = size.match(/([\d.]+)/)
+  return match ? parseFloat(match[1]) : 0
+}
 
 interface NetworkPickerProps {
   onStart: (network: NetworkInfo, color: 'w' | 'b', temperature: number) => void
@@ -9,6 +22,32 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
   const [selected, setSelected] = useState<NetworkInfo>(NETWORKS[0])
   const [color, setColor] = useState<'w' | 'b' | 'random'>('w')
   const [temperature, setTemperature] = useState(0.15)
+  const [sortColumn, setSortColumn] = useState<SortColumn>('elo')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
+
+  const sortedNetworks = useMemo(() => {
+    const sorted = [...NETWORKS].sort((a, b) => {
+      const val = sortColumn === 'elo'
+        ? parseElo(a.elo) - parseElo(b.elo)
+        : parseSizeMB(a.size) - parseSizeMB(b.size)
+      return sortDirection === 'asc' ? val : -val
+    })
+    return sorted
+  }, [sortColumn, sortDirection])
+
+  const toggleSort = (col: SortColumn) => {
+    if (sortColumn === col) {
+      setSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortColumn(col)
+      setSortDirection('asc')
+    }
+  }
+
+  const sortIndicator = (col: SortColumn) => {
+    if (sortColumn !== col) return ' \u2195'
+    return sortDirection === 'asc' ? ' \u2191' : ' \u2193'
+  }
 
   const handleStart = () => {
     const actualColor = color === 'random'
@@ -28,9 +67,34 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
 
       {/* Network selection */}
       <div className="w-full">
-        <h2 className="text-lg font-semibold text-gray-200 mb-3">Choose your opponent</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-gray-200">Choose your opponent</h2>
+          <div className="flex items-center gap-1 text-xs">
+            <span className="text-gray-500 mr-1">Sort:</span>
+            <button
+              onClick={() => toggleSort('elo')}
+              className={`px-2 py-1 rounded transition-colors font-medium ${
+                sortColumn === 'elo'
+                  ? 'bg-emerald-800/60 text-emerald-300'
+                  : 'text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              Elo{sortIndicator('elo')}
+            </button>
+            <button
+              onClick={() => toggleSort('size')}
+              className={`px-2 py-1 rounded transition-colors font-medium ${
+                sortColumn === 'size'
+                  ? 'bg-emerald-800/60 text-emerald-300'
+                  : 'text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              Size{sortIndicator('size')}
+            </button>
+          </div>
+        </div>
         <div className="grid gap-2">
-          {NETWORKS.map((net) => (
+          {sortedNetworks.map((net) => (
             <button
               key={net.id}
               onClick={() => setSelected(net)}
