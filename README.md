@@ -1,10 +1,12 @@
 # Play Lc0
 
-Play chess against [Leela Chess Zero](https://lczero.org/) neural networks directly in your browser. All inference runs client-side via ONNX Runtime Web — no server required.
+Play chess against neural networks in your browser. Uses networks from the [Lc0](https://lczero.org/) ecosystem. All inference runs client-side via ONNX Runtime Web — no server required.
+
+**Note:** This is an independent project and is not officially affiliated with Leela Chess Zero.
 
 ## Features
 
-- **Multiple networks** — Choose from 7 networks ranging from ~800 to ~2400 Elo
+- **Multiple networks** — Choose from 36 networks ranging from ~800 to ~2800 Elo
 - **Fully client-side** — Neural network inference runs in a Web Worker using WebGPU (with WASM fallback)
 - **Model caching** — Models are cached in IndexedDB after the first download
 - **Click or drag** — Move pieces by clicking or drag-and-drop, with legal move indicators

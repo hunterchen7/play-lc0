@@ -223,7 +223,7 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
         <div className="text-center">
           <h1 className="text-4xl font-bold text-gray-100 mb-2">Play Lc0</h1>
           <p className="text-gray-400">
-            Leela Chess Zero in the browser — depth 0 (policy head only)
+            Chess with neural networks — depth 0 (policy head only)
           </p>
         </div>
         {/* Network selection */}

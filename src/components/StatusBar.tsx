@@ -45,7 +45,7 @@ function WDLBar({ wdl, playerColor }: { wdl: [number, number, number]; playerCol
 export function StatusBar({ engineState, gameStatus, lastMoveAlgebraic, playerColor }: StatusBarProps) {
   return (
     <div className="bg-slate-800 rounded-lg p-4 min-w-[220px]">
-      <h3 className="text-lg font-bold text-gray-200 mb-3">Leela Chess Zero</h3>
+      <h3 className="text-lg font-bold text-gray-200 mb-3">Engine</h3>
 
       {/* Game Status */}
       <div className="mb-3">
