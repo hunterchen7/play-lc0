@@ -12,6 +12,7 @@ import {
   deleteCachedModel,
   decompressGzip,
 } from "../engine/modelCache";
+import { getModelUrl } from "../config";
 
 type SortColumn = "elo" | "size";
 type SortDirection = "asc" | "desc";
@@ -27,7 +28,7 @@ function parseSizeMB(size: string): number {
 }
 
 function modelUrl(file: string) {
-  return `/models/${file}`;
+  return getModelUrl(file);
 }
 
 interface NetworkPickerProps {
@@ -126,7 +127,7 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
 
   const handleDownload = useCallback(async (net: NetworkInfo) => {
     const cacheKey = modelUrl(net.file);
-    const downloadUrl = net.url || cacheKey + ".bin";
+    const downloadUrl = net.url || cacheKey;
     setDownloading((prev) => new Map(prev).set(net.id, 0));
 
     try {
@@ -226,7 +227,7 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
         <div className="text-center">
           <h1 className="text-4xl font-bold text-gray-100 mb-2">Play Lc0</h1>
           <p className="text-gray-400">
-            Chess with neural networks — depth 0 (policy head only)
+            Chess with neural networks — depth 0 (policy head only, no search)
           </p>
         </div>
         {/* Network selection */}
@@ -329,7 +330,7 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
                             <span className="text-xs text-gray-300 font-mono cursor-help">
                               {net.downloadSize}
                             </span>
-                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2.5 py-1.5 bg-slate-700 border border-slate-600 text-xs text-gray-200 rounded-md whitespace-nowrap opacity-0 pointer-events-none group-hover/size:opacity-100 transition-opacity duration-150 shadow-lg z-10">
+                            <span className="absolute top-0 right-full mr-2 px-2.5 py-1.5 bg-slate-700 border border-slate-600 text-xs text-gray-200 rounded-md whitespace-nowrap opacity-0 pointer-events-none group-hover/size:opacity-100 transition-opacity duration-150 shadow-lg z-50">
                               Download: {net.downloadSize} (compressed)
                               <br />
                               On disk: {net.size} (uncompressed)

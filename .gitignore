@@ -24,3 +24,8 @@ dist-ssr
 *.sw?
 
 *.pb.gz
+
+# Model files (hosted on R2)
+*.onnx
+*.onnx.bin
+/.wrangler
