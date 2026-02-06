@@ -421,17 +421,6 @@ export const NETWORKS: NetworkInfo[] = [
     source: 'https://storage.lczero.org/files/networks/00af53b081e80147172e6f281c01daf5ca19ada173321438914c730370aa4267',
   },
   {
-    id: 'LS15-fp16',
-    name: 'Leelenstein 15.0',
-    arch: '256x21-SE (FP16)',
-    file: 'LS15-fp16.onnx',
-    size: '108.0 MB',
-    downloadSize: '99.3 MB',
-    elo: '~2585 STS',
-    description: 'Community-built "Frankenstein" net. FP16 quantized to fit in browser. Very strong positional play. Requires WebGPU.',
-    source: 'https://www.patreon.com/posts/leelenstein-15-0-38164065',
-  },
-  {
     id: 't1-256x10-distilled',
     name: 'T1-256x10 Distilled',
     arch: 'Transformer 256x10',
