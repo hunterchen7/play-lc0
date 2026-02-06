@@ -50,7 +50,9 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
       (localStorage.getItem("lc0-sort-direction") as SortDirection) || "asc"
     );
   });
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(() => {
+    return localStorage.getItem("lc0-search-term") || "";
+  });
 
   // Track which models are cached
   const [cachedModels, setCachedModels] = useState<Set<string>>(new Set());
@@ -59,11 +61,12 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
     new Map(),
   );
 
-  // Save sort preferences to localStorage
+  // Save sort preferences and search term to localStorage
   useEffect(() => {
     localStorage.setItem("lc0-sort-column", sortColumn);
     localStorage.setItem("lc0-sort-direction", sortDirection);
-  }, [sortColumn, sortDirection]);
+    localStorage.setItem("lc0-search-term", searchTerm);
+  }, [sortColumn, sortDirection, searchTerm]);
 
   // Check cache status on mount
   useEffect(() => {
