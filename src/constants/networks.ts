@@ -367,7 +367,7 @@ export const NETWORKS: NetworkInfo[] = [
     downloadSize: "2.3 MB",
     elo: "~2000",
     description:
-      "Maia 2200 fine-tuned on ~2000 of my online blitz and rapid games (20k steps, batch 128). Sadly this seems to have made it a little dumber.",
+      "Maia 2200 fine-tuned on ~2000 of my online blitz and rapid games (20k steps, batch 128); this seems to have made it a little dumber.",
     source: "Custom fine-tuned model",
   },
   // ── Master ───────────────────────────────────────────────────────
@@ -640,7 +640,7 @@ export const NETWORKS: NetworkInfo[] = [
     downloadSize: "223 MB",
     elo: "~2550–2650",
     description:
-      "Medium transformer distilled from T1. EXPERIMENTAL: Testing browser performance with larger transformers. Requires WebGPU.",
+      "Medium transformer distilled from T1. EXPERIMENTAL: Requires WebGPU + ~1.8 GB VRAM.",
     source:
       "https://storage.lczero.org/files/networks-contrib/t1-512x15x8h-distilled-swa-3395000.pb.gz",
   },
@@ -653,7 +653,7 @@ export const NETWORKS: NetworkInfo[] = [
     downloadSize: "225 MB",
     elo: "~2600-2700",
     description:
-      "Medium transformer with 16 attention heads. EXPERIMENTAL: Testing browser performance. Requires WebGPU.",
+      "Medium transformer with 16 attention heads. EXPERIMENTAL: Requires WebGPU + ~1.8 GB VRAM.",
     source:
       "https://storage.lczero.org/files/networks-contrib/t3-512x15x16h-distill-swa-2767500.pb.gz",
   },
@@ -666,7 +666,7 @@ export const NETWORKS: NetworkInfo[] = [
     downloadSize: "251 MB",
     elo: "~2650-2750",
     description:
-      "Large transformer with 768 filters and 24 attention heads. EXPERIMENTAL: Very large model for browser testing. Requires WebGPU.",
+      "Large transformer with 768 filters and 24 attention heads. EXPERIMENTAL: Requires WebGPU + ~2.4 GB VRAM.",
     source: "https://storage.lczero.org/files/768x15x24h-t82-swa-7464000.pb.gz",
   },
   {
@@ -678,7 +678,7 @@ export const NETWORKS: NetworkInfo[] = [
     downloadSize: "278 MB",
     elo: "~2700-2800",
     description:
-      "Big Transformer 3 — ~300 Elo stronger than best CNN. TCEC competitor. EXPERIMENTAL: Extreme size for browser. Requires WebGPU + 2.6 GB VRAM.",
+      "Big Transformer 3 — ~300 Elo stronger than best CNN. TCEC competitor. EXPERIMENTAL: Requires WebGPU + ~2.6 GB VRAM.",
     source:
       "https://storage.lczero.org/files/networks-contrib/BT3-768x15x24h-swa-2790000.pb.gz",
   },
@@ -691,7 +691,7 @@ export const NETWORKS: NetworkInfo[] = [
     downloadSize: "473 MB",
     elo: "~2800-2900",
     description:
-      "Big Transformer 4 — Strongest Leela network as of 2026/02/05. Grandmaster level at 1-node. EXPERIMENTAL: Massive size for benchmarking only. Requires WebGPU + 4 GB VRAM.",
+      "Big Transformer 4 — Strongest Leela network as of 2026/02/05. Grandmaster level at 1-node. EXPERIMENTAL: Largest model available; Requires WebGPU + ~4 GB VRAM.",
     source:
       "https://storage.lczero.org/files/networks-contrib/big-transformers/BT4-1024x15x32h-swa-6147500.pb.gz",
   },

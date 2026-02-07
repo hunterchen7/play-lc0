@@ -25,9 +25,13 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
             message: 'Downloading model...',
           })
 
-          const response = await fetch(msg.modelUrl + '.bin')
+          let response = await fetch(msg.modelUrl)
           if (!response.ok) {
-            throw new Error(`Failed to fetch model: ${response.status}`)
+            // Backward-compatible fallback for legacy URL patterns.
+            response = await fetch(msg.modelUrl + '.bin')
+          }
+          if (!response.ok) {
+            throw new Error(`Failed to fetch model: ${response.status} (${msg.modelUrl})`)
           }
 
           // Download with progress tracking
@@ -69,7 +73,12 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
             progress: 0.7,
             message: 'Decompressing...',
           })
-          modelData = await decompressGzip(compressed)
+          try {
+            modelData = await decompressGzip(compressed)
+          } catch {
+            // Some environments may host already-decompressed ONNX blobs.
+            modelData = compressed
+          }
 
           post({
             type: 'initProgress',
@@ -121,6 +130,23 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
           move: result.best.move,
           confidence: result.best.confidence,
           wdl: wdl,
+        })
+      } catch (error) {
+        post({
+          type: 'error',
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+      break
+    }
+
+    case 'evaluatePosition': {
+      try {
+        const inputTensor = encodeFenHistory(msg.history)
+        const { wdl } = await runInference(inputTensor)
+        post({
+          type: 'evaluation',
+          wdl,
         })
       } catch (error) {
         post({

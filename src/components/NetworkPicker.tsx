@@ -274,7 +274,7 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
               </button>
             </div>
           </div>
-          <div className="grid gap-2 max-h-[50vh] overflow-y-auto overflow-x-hidden rounded-lg pr-3">
+          <div className="flex flex-col gap-2 min-h-[50vh] max-h-[50vh] overflow-y-auto overflow-x-hidden rounded-lg pr-3">
             {sortedNetworks.map((net) => {
               const isCached = cachedModels.has(net.id);
               const dlProgress = downloading.get(net.id);

@@ -5,6 +5,7 @@ interface MoveHistoryProps {
   viewingMove: number | null; // null = live (latest position)
   onSelectMove: (moveIndex: number | null) => void;
   pgn: string;
+  fillHeight?: boolean;
 }
 
 export function MoveHistory({
@@ -12,6 +13,7 @@ export function MoveHistory({
   viewingMove,
   onSelectMove,
   pgn,
+  fillHeight = false,
 }: MoveHistoryProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const currentMove = viewingMove ?? moves.length - 1;
@@ -35,7 +37,7 @@ export function MoveHistory({
   }
 
   return (
-    <div className="flex flex-col gap-2 w-full">
+    <div className={`flex flex-col gap-2 w-full ${fillHeight ? "h-full min-h-0" : ""}`}>
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1 rounded-lg bg-slate-900 p-1">
           <button
@@ -74,7 +76,9 @@ export function MoveHistory({
           {/* Move list */}
           <div
             ref={scrollRef}
-            className="bg-slate-900 rounded-lg p-2 max-h-64 overflow-y-auto font-mono text-sm"
+            className={`bg-slate-900 rounded-lg p-2 font-mono text-sm overflow-y-auto ${
+              fillHeight ? "flex-1 min-h-0" : "max-h-64"
+            }`}
           >
             {movePairs.length === 0 ? (
               <p className="text-gray-600 text-center text-xs py-2">No moves yet</p>
@@ -143,7 +147,9 @@ export function MoveHistory({
         </>
       ) : (
         <pre
-          className="bg-slate-900 rounded-lg p-2 text-xs text-gray-400 whitespace-pre-wrap break-words max-h-64 overflow-y-auto cursor-pointer hover:text-gray-300 transition-colors"
+          className={`bg-slate-900 rounded-lg p-2 text-xs text-gray-400 whitespace-pre-wrap break-words overflow-y-auto cursor-pointer hover:text-gray-300 transition-colors ${
+            fillHeight ? "flex-1 min-h-0" : "max-h-64"
+          }`}
           onClick={() => navigator.clipboard.writeText(pgn)}
           title="Click to copy PGN"
         >

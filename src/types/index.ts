@@ -2,6 +2,7 @@
 export type WorkerRequest =
   | { type: 'init'; modelUrl: string }
   | { type: 'getBestMove'; fen: string; history: string[]; legalMoves: string[]; temperature: number }
+  | { type: 'evaluatePosition'; fen: string; history: string[] }
 
 // Messages from worker to main thread
 export type WorkerResponse =
@@ -12,6 +13,10 @@ export type WorkerResponse =
       type: 'bestMove'
       move: string
       confidence: number
+      wdl: [number, number, number]
+    }
+  | {
+      type: 'evaluation'
       wdl: [number, number, number]
     }
   | { type: 'error'; error: string }
