@@ -16,6 +16,9 @@ interface TournamentLiveScreenProps {
   onPause: () => void;
   onSetMoveDelayMs: (moveDelayMs: number) => void;
   onSetMaxSimultaneousGames: (maxSimultaneousGames: number) => void;
+  loadedEngineCount: number;
+  maxLoadedEngineCount: number;
+  estimatedEngineMemoryMb: number;
   onDownloadPgn: () => boolean;
   canDownloadPgn: boolean;
   onReset: () => void;
@@ -86,6 +89,9 @@ export function TournamentLiveScreen({
   onPause,
   onSetMoveDelayMs,
   onSetMaxSimultaneousGames,
+  loadedEngineCount,
+  maxLoadedEngineCount,
+  estimatedEngineMemoryMb,
   onDownloadPgn,
   canDownloadPgn,
   onReset,
@@ -529,6 +535,17 @@ export function TournamentLiveScreen({
               aria-label="Tournament concurrency"
             />
           </label>
+          <div className="rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 min-w-[220px]">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs text-gray-300">Engine memory (est.)</span>
+              <span className="text-xs text-gray-400">
+                {estimatedEngineMemoryMb.toFixed(1)} MB
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] text-gray-500">
+              Loaded engines: {loadedEngineCount}/{maxLoadedEngineCount}
+            </p>
+          </div>
           <div
             className={`px-3 py-2 rounded-lg border ${tournamentStatusClass(state.status)}`}
           >

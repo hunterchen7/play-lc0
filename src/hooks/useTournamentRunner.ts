@@ -41,6 +41,7 @@ const MIN_TIEBREAK_WIN_BY = 1;
 const MAX_TIEBREAK_WIN_BY = 5;
 const MIN_SIMULTANEOUS_GAMES = 1;
 const MAX_SIMULTANEOUS_GAMES = 8;
+const ENGINE_CACHE_BUFFER = 2;
 const MOVE_DELAY_DEFAULT_MS = 100;
 const MOVE_DELAY_MIN_MS = 0;
 const MOVE_DELAY_MAX_MS = 1000;
@@ -118,6 +119,17 @@ function clampMaxSimultaneousGames(value: number): number {
     MIN_SIMULTANEOUS_GAMES,
     Math.min(MAX_SIMULTANEOUS_GAMES, Math.round(value)),
   );
+}
+
+function parseModelSizeMb(size: string): number {
+  const match = size.match(/([\d.]+)/);
+  if (!match) return 0;
+  const parsed = parseFloat(match[1]);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function computeMaxLoadedEnginesFromConcurrency(concurrency: number): number {
+  return clampMaxSimultaneousGames(concurrency) * 2 + ENGINE_CACHE_BUFFER;
 }
 
 function normalizeTiebreakMode(value: unknown): TournamentTiebreakMode {
@@ -525,6 +537,17 @@ export function useTournamentRunner() {
   const [savedTournaments, setSavedTournaments] = useState<
     TournamentHistorySummary[]
   >([]);
+  const [engineStats, setEngineStats] = useState<{
+    loadedCount: number;
+    estimatedMemoryMb: number;
+    maxLoadedCount: number;
+  }>(() => ({
+    loadedCount: 0,
+    estimatedMemoryMb: 0,
+    maxLoadedCount: computeMaxLoadedEnginesFromConcurrency(
+      persistedRef.current?.state.maxSimultaneousGames ?? 2,
+    ),
+  }));
 
   const byeMatchPointsRef = useRef<Map<string, number>>(
     persistedRef.current?.byeMatchPoints ?? new Map(),
@@ -542,6 +565,7 @@ export function useTournamentRunner() {
   const mountedRef = useRef(true);
   const persistTimerRef = useRef<number | null>(null);
   const engineMapRef = useRef(new Map<string, Lc0Engine>());
+  const engineLastUsedAtRef = useRef(new Map<string, number>());
   const engineInitPromiseRef = useRef(new Map<string, Promise<Lc0Engine>>());
   const matchAbortMapRef = useRef(new Map<string, MatchAbortToken>());
   const historyRecordIdRef = useRef<string | null>(
@@ -615,6 +639,120 @@ export function useTournamentRunner() {
     }
   }, []);
 
+  const updateEngineStats = useCallback(() => {
+    if (!mountedRef.current) return;
+
+    const current = stateRef.current;
+    const entrantsById = new Map(
+      current.entrants.map((entrant) => [entrant.id, entrant]),
+    );
+    const loadedIds = [...engineMapRef.current.keys()];
+    const estimatedMemoryMb = loadedIds.reduce((sum, entrantId) => {
+      const entrant = entrantsById.get(entrantId);
+      if (!entrant) return sum;
+      return sum + parseModelSizeMb(entrant.network.size);
+    }, 0);
+
+    setEngineStats({
+      loadedCount: loadedIds.length,
+      estimatedMemoryMb: Math.round(estimatedMemoryMb * 10) / 10,
+      maxLoadedCount: computeMaxLoadedEnginesFromConcurrency(
+        current.maxSimultaneousGames,
+      ),
+    });
+  }, []);
+
+  const selectEvictionCandidate = useCallback(
+    (protectedEntrants: Set<string>): string | null => {
+      const current = stateRef.current;
+      const now = Date.now();
+      const activeEntrants = new Set<string>();
+      for (const match of current.matches) {
+        if (match.status !== "running") continue;
+        activeEntrants.add(match.whiteEntrantId);
+        activeEntrants.add(match.blackEntrantId);
+      }
+
+      const candidates = [...engineMapRef.current.keys()].filter(
+        (entrantId) =>
+          !protectedEntrants.has(entrantId) &&
+          !activeEntrants.has(entrantId) &&
+          !engineInitPromiseRef.current.has(entrantId),
+      );
+      if (candidates.length === 0) return null;
+
+      const upcomingMatches = current.matches
+        .filter((match) => {
+          if (match.status === "waiting") return true;
+          if (match.status !== "error") return false;
+          if ((match.retryCount ?? 0) >= MAX_MATCH_ERROR_RETRIES) return false;
+          if (!match.nextRetryAt) return true;
+          const retryAtMs = Date.parse(match.nextRetryAt);
+          if (Number.isNaN(retryAtMs)) return true;
+          return retryAtMs <= now;
+        })
+        .sort((a, b) => {
+          if (a.round !== b.round) return a.round - b.round;
+          if (a.board !== b.board) return a.board - b.board;
+          if (a.seriesId !== b.seriesId) return a.seriesId.localeCompare(b.seriesId);
+          return a.seriesGameIndex - b.seriesGameIndex;
+        });
+
+      let bestId: string | null = null;
+      let bestDistance = -1;
+      let bestLastUsed = Number.POSITIVE_INFINITY;
+
+      for (const entrantId of candidates) {
+        const nextUseIndex = upcomingMatches.findIndex(
+          (match) =>
+            match.whiteEntrantId === entrantId || match.blackEntrantId === entrantId,
+        );
+        const distance = nextUseIndex === -1 ? Number.POSITIVE_INFINITY : nextUseIndex;
+        const lastUsedAt = engineLastUsedAtRef.current.get(entrantId) ?? 0;
+        if (
+          bestId === null ||
+          distance > bestDistance ||
+          (distance === bestDistance && lastUsedAt < bestLastUsed)
+        ) {
+          bestId = entrantId;
+          bestDistance = distance;
+          bestLastUsed = lastUsedAt;
+        }
+      }
+
+      return bestId;
+    },
+    [],
+  );
+
+  const ensureEngineCapacity = useCallback(
+    (protectedEntrants: Set<string>) => {
+      const maxLoadedCount = computeMaxLoadedEnginesFromConcurrency(
+        stateRef.current.maxSimultaneousGames,
+      );
+      let changed = false;
+
+      while (engineMapRef.current.size >= maxLoadedCount) {
+        const candidate = selectEvictionCandidate(protectedEntrants);
+        if (!candidate) break;
+
+        const engine = engineMapRef.current.get(candidate);
+        if (!engine) break;
+
+        engine.terminate();
+        engineMapRef.current.delete(candidate);
+        engineInitPromiseRef.current.delete(candidate);
+        engineLastUsedAtRef.current.delete(candidate);
+        changed = true;
+      }
+
+      if (changed) {
+        updateEngineStats();
+      }
+    },
+    [selectEvictionCandidate, updateEngineStats],
+  );
+
   const terminateAllEngines = useCallback(() => {
     for (const token of matchAbortMapRef.current.values()) {
       token.abort();
@@ -624,8 +762,10 @@ export function useTournamentRunner() {
       engine.terminate();
     }
     engineMapRef.current.clear();
+    engineLastUsedAtRef.current.clear();
     engineInitPromiseRef.current.clear();
-  }, []);
+    updateEngineStats();
+  }, [updateEngineStats]);
 
   const invalidateEngineForEntrant = useCallback((entrantId: string) => {
     const engine = engineMapRef.current.get(entrantId);
@@ -633,8 +773,10 @@ export function useTournamentRunner() {
       engine.terminate();
       engineMapRef.current.delete(entrantId);
     }
+    engineLastUsedAtRef.current.delete(entrantId);
     engineInitPromiseRef.current.delete(entrantId);
-  }, []);
+    updateEngineStats();
+  }, [updateEngineStats]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -698,6 +840,10 @@ export function useTournamentRunner() {
     void archiveTournamentSnapshot();
   }, [archiveTournamentSnapshot, state.status]);
 
+  useEffect(() => {
+    updateEngineStats();
+  }, [state.entrants, state.maxSimultaneousGames, updateEngineStats]);
+
   const setStandingsFromCurrent = useCallback(
     (entrants: TournamentEntrant[]) => {
       const current = stateRef.current;
@@ -718,44 +864,57 @@ export function useTournamentRunner() {
     [setRuntime],
   );
 
-  const getOrInitEngine = useCallback(async (entrant: TournamentEntrant) => {
-    const existing = engineMapRef.current.get(entrant.id);
-    if (existing) return existing;
+  const getOrInitEngine = useCallback(
+    async (entrant: TournamentEntrant, protectedEntrantIds?: Set<string>) => {
+      const existing = engineMapRef.current.get(entrant.id);
+      if (existing) {
+        engineLastUsedAtRef.current.set(entrant.id, Date.now());
+        return existing;
+      }
 
-    const pending = engineInitPromiseRef.current.get(entrant.id);
-    if (pending) return pending;
+      const pending = engineInitPromiseRef.current.get(entrant.id);
+      if (pending) return pending;
 
-    const promise = new Promise<Lc0Engine>((resolve, reject) => {
-      const engine = new Lc0Engine();
-      const unsub = engine.subscribe((partial) => {
-        if (partial.error) {
-          unsub();
-          engine.terminate();
-          reject(new Error(partial.error));
-          return;
-        }
+      const protectedEntrants = new Set(protectedEntrantIds ?? []);
+      protectedEntrants.add(entrant.id);
+      ensureEngineCapacity(protectedEntrants);
 
-        if (partial.isReady) {
-          unsub();
-          resolve(engine);
-        }
-      });
+      const promise = new Promise<Lc0Engine>((resolve, reject) => {
+        const engine = new Lc0Engine();
+        const unsub = engine.subscribe((partial) => {
+          if (partial.error) {
+            unsub();
+            engine.terminate();
+            reject(new Error(partial.error));
+            return;
+          }
 
-      engine.init(`/models/${entrant.network.file}`);
-    })
-      .then((engine) => {
-        engineMapRef.current.set(entrant.id, engine);
-        engineInitPromiseRef.current.delete(entrant.id);
-        return engine;
+          if (partial.isReady) {
+            unsub();
+            resolve(engine);
+          }
+        });
+
+        engine.init(`/models/${entrant.network.file}`);
       })
-      .catch((error) => {
-        engineInitPromiseRef.current.delete(entrant.id);
-        throw error;
-      });
+        .then((engine) => {
+          engineMapRef.current.set(entrant.id, engine);
+          engineLastUsedAtRef.current.set(entrant.id, Date.now());
+          engineInitPromiseRef.current.delete(entrant.id);
+          updateEngineStats();
+          return engine;
+        })
+        .catch((error) => {
+          engineInitPromiseRef.current.delete(entrant.id);
+          updateEngineStats();
+          throw error;
+        });
 
-    engineInitPromiseRef.current.set(entrant.id, promise);
-    return promise;
-  }, []);
+      engineInitPromiseRef.current.set(entrant.id, promise);
+      return promise;
+    },
+    [ensureEngineCapacity, updateEngineStats],
+  );
 
   const evaluateSnapshot = useCallback(
     async (
@@ -1123,10 +1282,21 @@ export function useTournamentRunner() {
         if (!whiteEntrant || !blackEntrant) return;
 
         const enginesResult = await withMatchAbort(
-          Promise.all([
-            getOrInitEngine(whiteEntrant),
-            getOrInitEngine(blackEntrant),
-          ]),
+          (async () => {
+            const protectedEntrants = new Set([
+              whiteEntrant.id,
+              blackEntrant.id,
+            ]);
+            const whiteEngine = await getOrInitEngine(
+              whiteEntrant,
+              protectedEntrants,
+            );
+            const blackEngine = await getOrInitEngine(
+              blackEntrant,
+              protectedEntrants,
+            );
+            return [whiteEngine, blackEngine] as const;
+          })(),
           abortToken,
         );
         if (enginesResult === "aborted") return;
@@ -1576,17 +1746,6 @@ export function useTournamentRunner() {
         config.entrants.map((entrant) => [entrant.id, entrant]),
       );
 
-      await Promise.all(
-        config.entrants.map(async (entrant) => {
-          try {
-            await getOrInitEngine(entrant);
-          } catch (error) {
-            const reason = error instanceof Error ? error.message : String(error);
-            throw new Error(`Failed to load ${entrant.label}: ${reason}`);
-          }
-        }),
-      );
-
       if (!isRunActive(runId)) return;
 
       const roundRobinPairings =
@@ -1710,7 +1869,6 @@ export function useTournamentRunner() {
       }));
     },
     [
-      getOrInitEngine,
       isRunActive,
       reconcileRoundSeries,
       reconcileSeriesFromMatch,
@@ -2203,6 +2361,7 @@ export function useTournamentRunner() {
 
   return {
     state,
+    engineStats,
     savedTournaments,
     selectedMatch,
     startTournament,

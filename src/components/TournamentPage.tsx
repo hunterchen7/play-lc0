@@ -20,6 +20,7 @@ type WakeLockSentinelLike = {
 export function TournamentPage({ onBackToHome }: TournamentPageProps) {
   const {
     state,
+    engineStats,
     savedTournaments,
     selectedMatch,
     startTournament,
@@ -164,6 +165,9 @@ export function TournamentPage({ onBackToHome }: TournamentPageProps) {
       canDownloadPgn={canDownloadPgn}
       onSetMoveDelayMs={setMoveDelayMs}
       onSetMaxSimultaneousGames={setMaxSimultaneousGames}
+      loadedEngineCount={engineStats.loadedCount}
+      maxLoadedEngineCount={engineStats.maxLoadedCount}
+      estimatedEngineMemoryMb={engineStats.estimatedMemoryMb}
       onReset={() => {
         resetTournament();
       }}
