@@ -25,9 +25,28 @@ interface NetworkPickerProps {
   ) => void;
 }
 
-function parseElo(elo: string): number {
-  const match = elo.match(/(\d+)/);
-  return match ? parseInt(match[1], 10) : 0;
+function parseEloBounds(elo: string): { low: number; high: number } {
+  const values = (elo.match(/\d+/g) ?? [])
+    .map((value) => parseInt(value, 10))
+    .filter((value) => Number.isFinite(value));
+
+  if (values.length === 0) return { low: 0, high: 0 };
+  if (values.length === 1) return { low: values[0], high: values[0] };
+
+  const first = values[0];
+  const second = values[1];
+  return {
+    low: Math.min(first, second),
+    high: Math.max(first, second),
+  };
+}
+
+function compareElo(a: string, b: string): number {
+  const left = parseEloBounds(a);
+  const right = parseEloBounds(b);
+  if (left.low !== right.low) return left.low - right.low;
+  if (left.high !== right.high) return left.high - right.high;
+  return 0;
 }
 
 function parseSizeMB(size: string): number {
@@ -118,7 +137,7 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
     const sorted = [...filtered].sort((a, b) => {
       const val =
         sortColumn === "elo"
-          ? parseElo(a.elo) - parseElo(b.elo)
+          ? compareElo(a.elo, b.elo)
           : parseSizeMB(a.size) - parseSizeMB(b.size);
       return sortDirection === "asc" ? val : -val;
     });
@@ -274,7 +293,7 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
               </button>
             </div>
           </div>
-          <div className="grid gap-2 max-h-[50vh] overflow-y-auto overflow-x-hidden rounded-lg pr-3">
+          <div className="flex flex-col gap-2 min-h-[50vh] max-h-[50vh] overflow-y-auto overflow-x-hidden rounded-lg pr-3">
             {sortedNetworks.map((net) => {
               const isCached = cachedModels.has(net.id);
               const dlProgress = downloading.get(net.id);

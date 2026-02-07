@@ -13,6 +13,10 @@ export class Lc0Engine {
     }) => void
     reject: (error: Error) => void
   } | null = null
+  private pendingEvaluation: {
+    resolve: (wdl: [number, number, number]) => void
+    reject: (error: Error) => void
+  } | null = null
 
   constructor() {
     this.worker = new Worker(
@@ -73,10 +77,17 @@ export class Lc0Engine {
         this.pendingMove = null
         break
 
+      case 'evaluation':
+        this.pendingEvaluation?.resolve(msg.wdl)
+        this.pendingEvaluation = null
+        break
+
       case 'error':
         this.notify({ error: msg.error, isThinking: false })
         this.pendingMove?.reject(new Error(msg.error))
+        this.pendingEvaluation?.reject(new Error(msg.error))
         this.pendingMove = null
+        this.pendingEvaluation = null
         break
     }
   }
@@ -94,8 +105,26 @@ export class Lc0Engine {
   ): Promise<{ move: string; confidence: number; wdl: [number, number, number] }> {
     this.notify({ isThinking: true })
     return new Promise((resolve, reject) => {
+      if (this.pendingMove) {
+        reject(new Error('Engine already has a pending move request'))
+        return
+      }
       this.pendingMove = { resolve, reject }
       this.post({ type: 'getBestMove', fen, history, legalMoves, temperature })
+    })
+  }
+
+  async evaluatePosition(
+    fen: string,
+    history: string[]
+  ): Promise<[number, number, number]> {
+    return new Promise((resolve, reject) => {
+      if (this.pendingEvaluation) {
+        reject(new Error('Engine already has a pending evaluation request'))
+        return
+      }
+      this.pendingEvaluation = { resolve, reject }
+      this.post({ type: 'evaluatePosition', fen, history })
     })
   }
 

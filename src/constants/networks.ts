@@ -4,6 +4,7 @@ export interface NetworkInfo {
   arch: string;
   file: string;
   size: string;
+  estimatedRuntimeMb?: number;
   downloadSize: string;
   elo: string;
   description: string;
@@ -18,6 +19,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "16x2",
     file: "tiny-gyal.onnx.bin",
     size: "1.1 MB",
+    estimatedRuntimeMb: 25,
     downloadSize: "791 KB",
     elo: "~800–1000",
     description:
@@ -31,6 +33,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "16x2-SE",
     file: "11258-16x2-se.onnx.bin",
     size: "15.6 MB",
+    estimatedRuntimeMb: 123,
     downloadSize: "8.9 MB",
     elo: "~800–1000",
     description:
@@ -44,6 +47,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "64x6-SE",
     file: "maia-1100.onnx.bin",
     size: "3.3 MB",
+    estimatedRuntimeMb: 39,
     downloadSize: "2.4 MB",
     elo: "1100",
     description:
@@ -57,6 +61,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "128x10",
     file: "mean-girl-8.onnx.bin",
     size: "1.5 MB",
+    estimatedRuntimeMb: 29,
     downloadSize: "1.2 MB",
     elo: "~1200–1400",
     description:
@@ -70,6 +75,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "24x3-SE",
     file: "11258-24x3-se.onnx.bin",
     size: "15.7 MB",
+    estimatedRuntimeMb: 124,
     downloadSize: "8.9 MB",
     elo: "~1200–1400",
     description:
@@ -83,6 +89,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "64x6-SE",
     file: "maia-1200.onnx.bin",
     size: "3.3 MB",
+    estimatedRuntimeMb: 39,
     downloadSize: "2.3 MB",
     elo: "1200",
     description:
@@ -95,6 +102,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "64x6-SE",
     file: "maia-1300.onnx.bin",
     size: "3.3 MB",
+    estimatedRuntimeMb: 39,
     downloadSize: "2.3 MB",
     elo: "1300",
     description:
@@ -108,6 +116,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "32x4-SE",
     file: "11258-32x4-se.onnx.bin",
     size: "15.9 MB",
+    estimatedRuntimeMb: 125,
     downloadSize: "9.0 MB",
     elo: "~1500–1700",
     description:
@@ -121,6 +130,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "64x6-SE",
     file: "maia-1400.onnx.bin",
     size: "3.3 MB",
+    estimatedRuntimeMb: 39,
     downloadSize: "2.4 MB",
     elo: "1400",
     description:
@@ -133,6 +143,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "64x6-SE",
     file: "maia-1500.onnx.bin",
     size: "3.3 MB",
+    estimatedRuntimeMb: 39,
     downloadSize: "2.3 MB",
     elo: "1500",
     description:
@@ -146,6 +157,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "64x6-SE",
     file: "maia-1600.onnx.bin",
     size: "3.3 MB",
+    estimatedRuntimeMb: 39,
     downloadSize: "2.4 MB",
     elo: "1600",
     description:
@@ -158,6 +170,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "48x5",
     file: "evilgyal-6.onnx.bin",
     size: "2.2 MB",
+    estimatedRuntimeMb: 33,
     downloadSize: "1.8 MB",
     elo: "~1700–1800",
     description:
@@ -171,6 +184,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "64x6-SE",
     file: "maia-1700.onnx.bin",
     size: "3.3 MB",
+    estimatedRuntimeMb: 39,
     downloadSize: "2.4 MB",
     elo: "1700",
     description:
@@ -183,6 +197,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "64x6-SE",
     file: "maia-1800.onnx.bin",
     size: "3.3 MB",
+    estimatedRuntimeMb: 39,
     downloadSize: "2.3 MB",
     elo: "1800",
     description:
@@ -195,6 +210,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "64x6-SE",
     file: "maia-1900.onnx.bin",
     size: "3.3 MB",
+    estimatedRuntimeMb: 38,
     downloadSize: "2.3 MB",
     elo: "1900",
     description:
@@ -207,6 +223,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "48x5",
     file: "goodgyal-5.onnx.bin",
     size: "2.2 MB",
+    estimatedRuntimeMb: 33,
     downloadSize: "1.8 MB",
     elo: "~1800–1900",
     description:
@@ -220,6 +237,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "48x5-SE",
     file: "11258-48x5-se.onnx.bin",
     size: "16.5 MB",
+    estimatedRuntimeMb: 129,
     downloadSize: "9.3 MB",
     elo: "~1800–1900",
     description:
@@ -234,6 +252,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "64x6",
     file: "badgyal-3.onnx.bin",
     size: "3.4 MB",
+    estimatedRuntimeMb: 40,
     downloadSize: "2.8 MB",
     elo: "~1900–2050",
     description:
@@ -247,6 +266,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "64x6-SE",
     file: "11258-64x6-se.onnx.bin",
     size: "17.5 MB",
+    estimatedRuntimeMb: 134,
     downloadSize: "10.1 MB",
     elo: "~2000–2100",
     description:
@@ -261,6 +281,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "80x7-SE",
     file: "11258-80x7-se.onnx.bin",
     size: "19.0 MB",
+    estimatedRuntimeMb: 147,
     downloadSize: "11.4 MB",
     elo: "~2100–2200",
     description:
@@ -274,6 +295,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "96x8-SE",
     file: "11258-96x8-se.onnx.bin",
     size: "21.2 MB",
+    estimatedRuntimeMb: 160,
     downloadSize: "13.2 MB",
     elo: "~2150–2250",
     description:
@@ -288,6 +310,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "104x9-SE",
     file: "11258-104x9-se.onnx.bin",
     size: "22.9 MB",
+    estimatedRuntimeMb: 169,
     downloadSize: "14.6 MB",
     elo: "~2200–2300",
     description:
@@ -301,6 +324,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "112x9-SE",
     file: "11258-112x9-se.onnx.bin",
     size: "24.0 MB",
+    estimatedRuntimeMb: 177,
     downloadSize: "15.6 MB",
     elo: "~2250–2350",
     description:
@@ -314,6 +338,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "112x9-SE",
     file: "ender-112x9-se.onnx.bin",
     size: "24.0 MB",
+    estimatedRuntimeMb: 177,
     downloadSize: "16.1 MB",
     elo: "~2200–2300",
     description:
@@ -326,6 +351,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "112x9-SE",
     file: "32930-112x9-se.onnx.bin",
     size: "24.0 MB",
+    estimatedRuntimeMb: 177,
     downloadSize: "15.5 MB",
     elo: "~2250–2350",
     description:
@@ -339,6 +365,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "112x10-SE",
     file: "11258-112x10-se.onnx.bin",
     size: "24.9 MB",
+    estimatedRuntimeMb: 182,
     downloadSize: "16.6 MB",
     elo: "~2250–2350",
     description:
@@ -352,6 +379,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "64x6-SE",
     file: "maia-2200.onnx.bin",
     size: "3.3 MB",
+    estimatedRuntimeMb: 39,
     downloadSize: "2.2 MB",
     elo: "2200",
     description:
@@ -364,10 +392,11 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "64x6-SE",
     file: "maia2200-64x6-hunter-20000.onnx.bin",
     size: "3.3 MB",
+    estimatedRuntimeMb: 39,
     downloadSize: "2.3 MB",
     elo: "~2000",
     description:
-      "Maia 2200 fine-tuned on ~2000 of my online blitz and rapid games (20k steps, batch 128). Sadly this seems to have made it a little dumber.",
+      "Maia 2200 fine-tuned on ~2000 of my online blitz and rapid games (20k steps, batch 128); this seems to have made it a little dumber.",
     source: "Custom fine-tuned model",
   },
   // ── Master ───────────────────────────────────────────────────────
@@ -377,6 +406,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "128x10",
     file: "t70-703810.onnx.bin",
     size: "14.4 MB",
+    estimatedRuntimeMb: 105,
     downloadSize: "12.0 MB",
     elo: "~2200–2350",
     description:
@@ -390,6 +420,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "120x9-SE",
     file: "11258-120x9-se.onnx.bin",
     size: "25.3 MB",
+    estimatedRuntimeMb: 183,
     downloadSize: "16.6 MB",
     elo: "~2250–2350",
     description:
@@ -403,6 +434,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "128x9-SE",
     file: "11258-128x9-se.onnx.bin",
     size: "26.6 MB",
+    estimatedRuntimeMb: 192,
     downloadSize: "17.6 MB",
     elo: "~2250–2350",
     description:
@@ -416,6 +448,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "120x10-SE",
     file: "11258-120x10-se.onnx.bin",
     size: "26.3 MB",
+    estimatedRuntimeMb: 190,
     downloadSize: "17.5 MB",
     elo: "~2250–2350",
     description:
@@ -429,6 +462,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "128x10",
     file: "badgyal-4a.onnx.bin",
     size: "14.1 MB",
+    estimatedRuntimeMb: 104,
     downloadSize: "12.2 MB",
     elo: "~2250–2400",
     description:
@@ -442,6 +476,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "128x10",
     file: "badgyal-6.onnx.bin",
     size: "14.1 MB",
+    estimatedRuntimeMb: 104,
     downloadSize: "12.1 MB",
     elo: "~2250–2400",
     description:
@@ -455,6 +490,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "128x10-SE",
     file: "11258-128x10-se.onnx.bin",
     size: "27.8 MB",
+    estimatedRuntimeMb: 199,
     downloadSize: "18.6 MB",
     elo: "~2250–2350",
     description:
@@ -468,6 +504,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "128x10-SE",
     file: "11258-128x10-se-swa.onnx.bin",
     size: "27.8 MB",
+    estimatedRuntimeMb: 199,
     downloadSize: "18.6 MB",
     elo: "~2250–2350",
     description:
@@ -481,6 +518,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "128x10-SE",
     file: "LD2.onnx.bin",
     size: "14.1 MB",
+    estimatedRuntimeMb: 104,
     downloadSize: "11.9 MB",
     elo: "~2291 STS",
     description:
@@ -493,6 +531,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "128x10",
     file: "badgyal-7.onnx.bin",
     size: "14.1 MB",
+    estimatedRuntimeMb: 104,
     downloadSize: "12.1 MB",
     elo: "~2300–2450",
     description:
@@ -506,6 +545,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "128x10",
     file: "bad-gyal-8.onnx.bin",
     size: "14.1 MB",
+    estimatedRuntimeMb: 104,
     downloadSize: "12.2 MB",
     elo: "~2300–2450",
     description:
@@ -519,6 +559,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "128x10-SE",
     file: "11248-128x10-se.onnx.bin",
     size: "27.8 MB",
+    estimatedRuntimeMb: 199,
     downloadSize: "18.9 MB",
     elo: "~2300–2400",
     description:
@@ -532,6 +573,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "192x16",
     file: "goodgyal-6.onnx.bin",
     size: "45.2 MB",
+    estimatedRuntimeMb: 291,
     downloadSize: "38.3 MB",
     elo: "~2400–2500",
     description:
@@ -545,6 +587,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "192x16",
     file: "goodgyal-7.onnx.bin",
     size: "45.2 MB",
+    estimatedRuntimeMb: 291,
     downloadSize: "38.4 MB",
     elo: "~2400–2500",
     description:
@@ -558,6 +601,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "256x12-SE",
     file: "11248-256x12-se.onnx.bin",
     size: "71.7 MB",
+    estimatedRuntimeMb: 393,
     downloadSize: "53.4 MB",
     elo: "~2500–2600",
     description:
@@ -571,6 +615,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "256x19-SE",
     file: "t71-frc.onnx.bin",
     size: "92.6 MB",
+    estimatedRuntimeMb: 461,
     downloadSize: "72.8 MB",
     elo: "~2500",
     description:
@@ -584,6 +629,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "256x19-SE",
     file: "t71-armageddon.onnx.bin",
     size: "92.6 MB",
+    estimatedRuntimeMb: 459,
     downloadSize: "71.0 MB",
     elo: "~2500",
     description:
@@ -598,6 +644,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "256x20",
     file: "t42850.onnx.bin",
     size: "130.3 MB",
+    estimatedRuntimeMb: 710,
     downloadSize: "93.6 MB",
     elo: "~2525–2581 STS",
     description:
@@ -611,6 +658,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "256x20-SE",
     file: "leelenstein-15.onnx.bin",
     size: "216 MB",
+    estimatedRuntimeMb: 1267,
     downloadSize: "142 MB",
     elo: "~2585 STS",
     description:
@@ -623,6 +671,7 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "Transformer 256x10",
     file: "t1-256x10-distilled.onnx.bin",
     size: "77.1 MB",
+    estimatedRuntimeMb: 459,
     downloadSize: "57.4 MB",
     elo: "~2400–2600",
     description:
@@ -637,10 +686,11 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "Transformer 512x15x8h",
     file: "t1-512x15x8h-distilled-swa-3395000.onnx.bin",
     size: "315 MB",
+    estimatedRuntimeMb: 1323,
     downloadSize: "223 MB",
     elo: "~2550–2650",
     description:
-      "Medium transformer distilled from T1. EXPERIMENTAL: Testing browser performance with larger transformers. Requires WebGPU.",
+      "Medium transformer distilled from T1. EXPERIMENTAL: Requires WebGPU + ~1.8 GB VRAM.",
     source:
       "https://storage.lczero.org/files/networks-contrib/t1-512x15x8h-distilled-swa-3395000.pb.gz",
   },
@@ -650,10 +700,11 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "Transformer 512x15x16h",
     file: "t3-512x15x16h-distill-swa-2767500.onnx.bin",
     size: "326 MB",
+    estimatedRuntimeMb: 1915,
     downloadSize: "225 MB",
     elo: "~2600-2700",
     description:
-      "Medium transformer with 16 attention heads. EXPERIMENTAL: Testing browser performance. Requires WebGPU.",
+      "Medium transformer with 16 attention heads. EXPERIMENTAL: Requires WebGPU + ~1.8 GB VRAM.",
     source:
       "https://storage.lczero.org/files/networks-contrib/t3-512x15x16h-distill-swa-2767500.pb.gz",
   },
@@ -663,10 +714,11 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "Transformer 768x15x24h",
     file: "t82-768x15x24h-swa-7464000.onnx.bin",
     size: "361 MB",
+    estimatedRuntimeMb: 1790,
     downloadSize: "251 MB",
     elo: "~2650-2750",
     description:
-      "Large transformer with 768 filters and 24 attention heads. EXPERIMENTAL: Very large model for browser testing. Requires WebGPU.",
+      "Large transformer with 768 filters and 24 attention heads. EXPERIMENTAL: Requires WebGPU + ~2.4 GB VRAM.",
     source: "https://storage.lczero.org/files/768x15x24h-t82-swa-7464000.pb.gz",
   },
   {
@@ -675,10 +727,11 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "Transformer 768x15x24h",
     file: "BT3-768x15x24h-swa-2790000.onnx.bin",
     size: "391 MB",
+    estimatedRuntimeMb: 1986,
     downloadSize: "278 MB",
     elo: "~2700-2800",
     description:
-      "Big Transformer 3 — ~300 Elo stronger than best CNN. TCEC competitor. EXPERIMENTAL: Extreme size for browser. Requires WebGPU + 2.6 GB VRAM.",
+      "Big Transformer 3 — ~300 Elo stronger than best CNN. TCEC competitor. EXPERIMENTAL: Requires WebGPU + ~2.6 GB VRAM.",
     source:
       "https://storage.lczero.org/files/networks-contrib/BT3-768x15x24h-swa-2790000.pb.gz",
   },
@@ -688,10 +741,11 @@ export const NETWORKS: NetworkInfo[] = [
     arch: "Transformer 1024x15x32h",
     file: "BT4-1024x15x32h-swa-6147500.onnx.bin",
     size: "707 MB",
+    estimatedRuntimeMb: 3229,
     downloadSize: "473 MB",
     elo: "~2800-2900",
     description:
-      "Big Transformer 4 — Strongest Leela network as of 2026/02/05. Grandmaster level at 1-node. EXPERIMENTAL: Massive size for benchmarking only. Requires WebGPU + 4 GB VRAM.",
+      "Big Transformer 4 — Strongest Leela network as of 2026/02/05. Grandmaster level at 1-node. EXPERIMENTAL: Largest model available; Requires WebGPU + ~4 GB VRAM.",
     source:
       "https://storage.lczero.org/files/networks-contrib/big-transformers/BT4-1024x15x32h-swa-6147500.pb.gz",
   },
