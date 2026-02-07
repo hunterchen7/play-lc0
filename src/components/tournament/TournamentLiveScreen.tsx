@@ -15,6 +15,7 @@ interface TournamentLiveScreenProps {
   onResume: () => void;
   onPause: () => void;
   onSetMoveDelayMs: (moveDelayMs: number) => void;
+  onSetMaxSimultaneousGames: (maxSimultaneousGames: number) => void;
   onDownloadPgn: () => boolean;
   canDownloadPgn: boolean;
   onReset: () => void;
@@ -84,6 +85,7 @@ export function TournamentLiveScreen({
   onResume,
   onPause,
   onSetMoveDelayMs,
+  onSetMaxSimultaneousGames,
   onDownloadPgn,
   canDownloadPgn,
   onReset,
@@ -505,6 +507,26 @@ export function TournamentLiveScreen({
               }
               className="mt-1 w-full accent-emerald-500"
               aria-label="Move delay in milliseconds"
+            />
+          </label>
+          <label className="rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 min-w-[220px]">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs text-gray-300">Concurrency</span>
+              <span className="text-xs text-gray-400">
+                {state.maxSimultaneousGames}
+              </span>
+            </div>
+            <input
+              type="range"
+              min="1"
+              max="8"
+              step="1"
+              value={state.maxSimultaneousGames}
+              onChange={(event) =>
+                onSetMaxSimultaneousGames(parseInt(event.target.value, 10))
+              }
+              className="mt-1 w-full accent-emerald-500"
+              aria-label="Tournament concurrency"
             />
           </label>
           <div

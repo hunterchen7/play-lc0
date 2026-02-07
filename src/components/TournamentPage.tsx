@@ -27,6 +27,7 @@ export function TournamentPage({ onBackToHome }: TournamentPageProps) {
     resumeTournament,
     pauseTournament,
     setMoveDelayMs,
+    setMaxSimultaneousGames,
     restartMatch,
     restartGameFromScratch,
     markMatchDraw,
@@ -162,6 +163,7 @@ export function TournamentPage({ onBackToHome }: TournamentPageProps) {
       onDownloadPgn={downloadTournamentPgn}
       canDownloadPgn={canDownloadPgn}
       onSetMoveDelayMs={setMoveDelayMs}
+      onSetMaxSimultaneousGames={setMaxSimultaneousGames}
       onReset={() => {
         resetTournament();
       }}

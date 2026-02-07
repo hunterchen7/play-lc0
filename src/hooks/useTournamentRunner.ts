@@ -39,6 +39,8 @@ const MAX_MAX_TIEBREAK_GAMES = 30;
 const DEFAULT_TIEBREAK_WIN_BY = 1;
 const MIN_TIEBREAK_WIN_BY = 1;
 const MAX_TIEBREAK_WIN_BY = 5;
+const MIN_SIMULTANEOUS_GAMES = 1;
+const MAX_SIMULTANEOUS_GAMES = 8;
 const MOVE_DELAY_DEFAULT_MS = 100;
 const MOVE_DELAY_MIN_MS = 0;
 const MOVE_DELAY_MAX_MS = 1000;
@@ -107,6 +109,14 @@ function clampTiebreakWinBy(value: number): number {
   return Math.max(
     MIN_TIEBREAK_WIN_BY,
     Math.min(MAX_TIEBREAK_WIN_BY, Math.round(value)),
+  );
+}
+
+function clampMaxSimultaneousGames(value: number): number {
+  if (!Number.isFinite(value)) return 2;
+  return Math.max(
+    MIN_SIMULTANEOUS_GAMES,
+    Math.min(MAX_SIMULTANEOUS_GAMES, Math.round(value)),
   );
 }
 
@@ -446,7 +456,7 @@ function deriveRunConfigFromSetup(config: TournamentSetupConfig): RunConfig {
     format: config.format,
     entrants: config.entrants,
     bestOf: Math.max(1, Math.floor(config.bestOf)),
-    maxSimultaneousGames: config.maxSimultaneousGames,
+    maxSimultaneousGames: clampMaxSimultaneousGames(config.maxSimultaneousGames),
     swissRounds: config.swissRounds,
     tiebreakMode: normalizeTiebreakMode(config.tiebreakMode),
     maxTiebreakGames: clampMaxTiebreakGames(config.maxTiebreakGames),
@@ -469,7 +479,7 @@ function deriveRunConfigFromState(state: TournamentRuntimeState): RunConfig | nu
     format: state.format,
     entrants: state.entrants,
     bestOf: Math.max(1, Math.floor(state.bestOf)),
-    maxSimultaneousGames: Math.max(1, state.maxSimultaneousGames),
+    maxSimultaneousGames: clampMaxSimultaneousGames(state.maxSimultaneousGames),
     swissRounds: Math.max(1, state.swissRounds),
     tiebreakMode: normalizeTiebreakMode(state.tiebreakMode),
     maxTiebreakGames: clampMaxTiebreakGames(state.maxTiebreakGames),
@@ -1425,7 +1435,6 @@ export function useTournamentRunner() {
       runId: number,
       round: number,
       entrantsById: Map<string, TournamentEntrant>,
-      maxSimultaneousGames: number,
       onMatchFinished: (matchId: string) => void,
     ) => {
       const running = new Map<string, Promise<void>>();
@@ -1480,6 +1489,9 @@ export function useTournamentRunner() {
       };
 
       while (isRunActive(runId)) {
+        const maxSimultaneousGames = clampMaxSimultaneousGames(
+          stateRef.current.maxSimultaneousGames,
+        );
         while (running.size < maxSimultaneousGames && isRunActive(runId)) {
           const waiting = availableMatches();
           if (waiting.length === 0) break;
@@ -1663,7 +1675,6 @@ export function useTournamentRunner() {
             runId,
             round,
             entrantsById,
-            config.maxSimultaneousGames,
             (finishedMatchId) => {
               reconcileSeriesFromMatch(finishedMatchId);
               setStandingsFromCurrent(config.entrants);
@@ -2077,6 +2088,18 @@ export function useTournamentRunner() {
     [setRuntime],
   );
 
+  const setMaxSimultaneousGames = useCallback(
+    (maxSimultaneousGames: number) => {
+      const nextConcurrency = clampMaxSimultaneousGames(maxSimultaneousGames);
+      setRuntime((prev) =>
+        prev.maxSimultaneousGames === nextConcurrency
+          ? prev
+          : { ...prev, maxSimultaneousGames: nextConcurrency },
+      );
+    },
+    [setRuntime],
+  );
+
   const openSavedTournament = useCallback(
     async (id: string): Promise<boolean> => {
       const restored = await getTournamentHistoryById(id);
@@ -2187,6 +2210,7 @@ export function useTournamentRunner() {
     resumeTournament,
     pauseTournament,
     setMoveDelayMs,
+    setMaxSimultaneousGames,
     restartMatch,
     restartGameFromScratch,
     markMatchDraw,
