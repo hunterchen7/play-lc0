@@ -8,6 +8,9 @@ const COMPLETED_AT_INDEX = "completedAt";
 
 export interface TournamentHistorySummary {
   id: string;
+  status: TournamentRuntimeState["status"];
+  isOngoing: boolean;
+  updatedAt: string;
   completedAt: string;
   format: TournamentRuntimeState["format"];
   entrantsCount: number;
@@ -25,6 +28,10 @@ interface TournamentHistoryRecord {
   completedAt: string;
   summary: TournamentHistorySummary;
   state: TournamentRuntimeState;
+}
+
+interface SaveTournamentHistoryOptions {
+  id?: string;
 }
 
 function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
@@ -100,19 +107,31 @@ function tournamentFingerprint(state: TournamentRuntimeState): string {
   return `t-${simpleHash(key)}`;
 }
 
-function buildSummary(state: TournamentRuntimeState): TournamentHistorySummary {
+function buildSummary(
+  state: TournamentRuntimeState,
+  forcedId?: string,
+): TournamentHistorySummary {
   const finishedGames = state.matches.filter(
     (match) => match.status === "finished" || match.status === "cancelled",
   ).length;
+  const status = state.status;
+  const isOngoing =
+    status === "running" || status === "paused" || status === "error";
+  const updatedAt = new Date().toISOString();
   const completedAt =
-    state.matches
-      .map((match) => match.endedAt)
-      .filter((value): value is string => Boolean(value))
-      .sort()
-      .at(-1) ?? new Date().toISOString();
+    status === "completed"
+      ? (state.matches
+          .map((match) => match.endedAt)
+          .filter((value): value is string => Boolean(value))
+          .sort()
+          .at(-1) ?? updatedAt)
+      : updatedAt;
 
   return {
-    id: tournamentFingerprint(state),
+    id: forcedId ?? tournamentFingerprint(state),
+    status,
+    isOngoing,
+    updatedAt,
     completedAt,
     format: state.format,
     entrantsCount: state.entrants.length,
@@ -128,6 +147,48 @@ function buildSummary(state: TournamentRuntimeState): TournamentHistorySummary {
         (row, idx) =>
           `${idx + 1}. ${row.label} (${row.matchPoints.toFixed(1)} MP, ${row.gamePoints.toFixed(1)} GP)`,
       ),
+  };
+}
+
+function normalizeSummary(
+  summary: TournamentHistorySummary,
+  state: TournamentRuntimeState,
+): TournamentHistorySummary {
+  const status = summary.status ?? state.status ?? "completed";
+  const isOngoing =
+    typeof summary.isOngoing === "boolean"
+      ? summary.isOngoing
+      : status === "running" || status === "paused" || status === "error";
+  const updatedAt = summary.updatedAt ?? summary.completedAt;
+
+  return {
+    ...summary,
+    id: summary.id,
+    status,
+    isOngoing,
+    updatedAt,
+    completedAt: summary.completedAt ?? updatedAt,
+    format: summary.format ?? state.format,
+    entrantsCount: summary.entrantsCount ?? state.entrants.length,
+    totalRounds: summary.totalRounds ?? state.totalRounds,
+    bestOf: summary.bestOf ?? state.bestOf,
+    maxSimultaneousGames:
+      summary.maxSimultaneousGames ?? state.maxSimultaneousGames,
+    totalGames: summary.totalGames ?? state.matches.length,
+    finishedGames:
+      summary.finishedGames ??
+      state.matches.filter(
+        (match) => match.status === "finished" || match.status === "cancelled",
+      ).length,
+    winnerLabel: summary.winnerLabel ?? state.standings[0]?.label ?? null,
+    topPlacings:
+      summary.topPlacings ??
+      state.standings
+        .slice(0, 3)
+        .map(
+          (row, idx) =>
+            `${idx + 1}. ${row.label} (${row.matchPoints.toFixed(1)} MP, ${row.gamePoints.toFixed(1)} GP)`,
+        ),
   };
 }
 
@@ -171,11 +232,12 @@ function enrichStateWithPgn(state: TournamentRuntimeState): TournamentRuntimeSta
 
 export async function saveTournamentHistory(
   state: TournamentRuntimeState,
+  options?: SaveTournamentHistoryOptions,
 ): Promise<string> {
   const db = await openTournamentHistoryDb();
   try {
     const archivedState = enrichStateWithPgn(state);
-    const summary = buildSummary(archivedState);
+    const summary = buildSummary(archivedState, options?.id);
     const record: TournamentHistoryRecord = {
       id: summary.id,
       completedAt: summary.completedAt,
@@ -215,7 +277,7 @@ export async function listTournamentHistory(
           return;
         }
         const value = cursor.value as TournamentHistoryRecord;
-        summaries.push(value.summary);
+        summaries.push(normalizeSummary(value.summary, value.state));
         cursor.continue();
       };
       cursorRequest.onerror = () => reject(cursorRequest.error);

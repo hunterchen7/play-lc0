@@ -29,11 +29,19 @@ import type {
   TournamentRuntimeState,
   TournamentSeries,
   TournamentSetupConfig,
+  TournamentTiebreakMode,
 } from "../types/tournament";
 
 const MAX_PLIES_PER_GAME = 300;
-const MAX_TIEBREAK_GAMES = 100;
-const MOVE_DELAY_MS = 100;
+const DEFAULT_MAX_TIEBREAK_GAMES = 4;
+const MIN_MAX_TIEBREAK_GAMES = 0;
+const MAX_MAX_TIEBREAK_GAMES = 30;
+const DEFAULT_TIEBREAK_WIN_BY = 1;
+const MIN_TIEBREAK_WIN_BY = 1;
+const MAX_TIEBREAK_WIN_BY = 5;
+const MOVE_DELAY_DEFAULT_MS = 100;
+const MOVE_DELAY_MIN_MS = 0;
+const MOVE_DELAY_MAX_MS = 1000;
 const MAX_GAME_DURATION_MS = 3 * 60 * 1000;
 const ENGINE_HEALTH_CHECK_TIMEOUT_MS = 2000;
 const MAX_MATCH_ERROR_RETRIES = 6;
@@ -47,6 +55,7 @@ interface PersistedTournamentSession {
   byeMatchPoints: Array<[string, number]>;
   byeGamePoints: Array<[string, number]>;
   byeRecipients: string[];
+  historyRecordId: string | null;
   savedAt: string;
 }
 
@@ -56,6 +65,9 @@ interface RunConfig {
   bestOf: number;
   maxSimultaneousGames: number;
   swissRounds: number;
+  tiebreakMode: TournamentTiebreakMode;
+  maxTiebreakGames: number;
+  tiebreakWinBy: number;
   totalRounds: number;
 }
 
@@ -64,6 +76,7 @@ interface LoadedPersistedTournament {
   byeMatchPoints: Map<string, number>;
   byeGamePoints: Map<string, number>;
   byeRecipients: Set<string>;
+  historyRecordId: string | null;
   autoResumePending: boolean;
 }
 
@@ -73,6 +86,38 @@ interface MatchAbortToken {
   abort: () => void;
 }
 
+function clampMoveDelayMs(value: number): number {
+  if (!Number.isFinite(value)) return MOVE_DELAY_DEFAULT_MS;
+  return Math.max(
+    MOVE_DELAY_MIN_MS,
+    Math.min(MOVE_DELAY_MAX_MS, Math.round(value)),
+  );
+}
+
+function clampMaxTiebreakGames(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_MAX_TIEBREAK_GAMES;
+  return Math.max(
+    MIN_MAX_TIEBREAK_GAMES,
+    Math.min(MAX_MAX_TIEBREAK_GAMES, Math.round(value)),
+  );
+}
+
+function clampTiebreakWinBy(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_TIEBREAK_WIN_BY;
+  return Math.max(
+    MIN_TIEBREAK_WIN_BY,
+    Math.min(MAX_TIEBREAK_WIN_BY, Math.round(value)),
+  );
+}
+
+function normalizeTiebreakMode(value: unknown): TournamentTiebreakMode {
+  return value === "win_by" ? "win_by" : "capped";
+}
+
+function createHistoryRecordId(): string {
+  return `hist-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+}
+
 function makeInitialState(): TournamentRuntimeState {
   return {
     status: "idle",
@@ -80,6 +125,10 @@ function makeInitialState(): TournamentRuntimeState {
     bestOf: 1,
     swissRounds: 5,
     maxSimultaneousGames: 2,
+    tiebreakMode: "capped",
+    maxTiebreakGames: DEFAULT_MAX_TIEBREAK_GAMES,
+    tiebreakWinBy: DEFAULT_TIEBREAK_WIN_BY,
+    moveDelayMs: MOVE_DELAY_DEFAULT_MS,
     currentRound: 0,
     totalRounds: 0,
     entrants: [],
@@ -148,6 +197,10 @@ function loadPersistedTournament(): LoadedPersistedTournament | null {
     const restoredState: TournamentRuntimeState = {
       ...parsed.state,
       status: parsed.state.status === "running" ? "paused" : parsed.state.status,
+      moveDelayMs: clampMoveDelayMs(parsed.state.moveDelayMs),
+      tiebreakMode: normalizeTiebreakMode(parsed.state.tiebreakMode),
+      maxTiebreakGames: clampMaxTiebreakGames(parsed.state.maxTiebreakGames),
+      tiebreakWinBy: clampTiebreakWinBy(parsed.state.tiebreakWinBy),
       matches: (parsed.state.matches ?? []).map(sanitizeRestoredMatch),
       series: (parsed.state.series ?? []).map((series) =>
         sanitizeRestoredSeries(series, parsed.state.bestOf),
@@ -166,6 +219,10 @@ function loadPersistedTournament(): LoadedPersistedTournament | null {
       byeMatchPoints: new Map(parsed.byeMatchPoints ?? []),
       byeGamePoints: new Map(parsed.byeGamePoints ?? []),
       byeRecipients: new Set(parsed.byeRecipients ?? []),
+      historyRecordId:
+        typeof parsed.historyRecordId === "string"
+          ? parsed.historyRecordId
+          : null,
       autoResumePending:
         parsed.state.status === "running" ||
         restoredState.error ===
@@ -391,6 +448,9 @@ function deriveRunConfigFromSetup(config: TournamentSetupConfig): RunConfig {
     bestOf: Math.max(1, Math.floor(config.bestOf)),
     maxSimultaneousGames: config.maxSimultaneousGames,
     swissRounds: config.swissRounds,
+    tiebreakMode: normalizeTiebreakMode(config.tiebreakMode),
+    maxTiebreakGames: clampMaxTiebreakGames(config.maxTiebreakGames),
+    tiebreakWinBy: clampTiebreakWinBy(config.tiebreakWinBy),
     totalRounds,
   };
 }
@@ -411,6 +471,9 @@ function deriveRunConfigFromState(state: TournamentRuntimeState): RunConfig | nu
     bestOf: Math.max(1, Math.floor(state.bestOf)),
     maxSimultaneousGames: Math.max(1, state.maxSimultaneousGames),
     swissRounds: Math.max(1, state.swissRounds),
+    tiebreakMode: normalizeTiebreakMode(state.tiebreakMode),
+    maxTiebreakGames: clampMaxTiebreakGames(state.maxTiebreakGames),
+    tiebreakWinBy: clampTiebreakWinBy(state.tiebreakWinBy),
     totalRounds,
   };
 }
@@ -471,7 +534,10 @@ export function useTournamentRunner() {
   const engineMapRef = useRef(new Map<string, Lc0Engine>());
   const engineInitPromiseRef = useRef(new Map<string, Promise<Lc0Engine>>());
   const matchAbortMapRef = useRef(new Map<string, MatchAbortToken>());
-  const completionArchivedRef = useRef(false);
+  const historyRecordIdRef = useRef<string | null>(
+    persistedRef.current?.historyRecordId ?? null,
+  );
+  const historyArchiveInFlightRef = useRef(false);
 
   const persistNow = useCallback((nextState: TournamentRuntimeState) => {
     if (typeof window === "undefined") return;
@@ -486,6 +552,7 @@ export function useTournamentRunner() {
       byeMatchPoints: [...byeMatchPointsRef.current.entries()],
       byeGamePoints: [...byeGamePointsRef.current.entries()],
       byeRecipients: [...byeRecipientsRef.current.values()],
+      historyRecordId: historyRecordIdRef.current,
       savedAt: new Date().toISOString(),
     };
 
@@ -575,20 +642,51 @@ export function useTournamentRunner() {
     };
   }, [persistNow, refreshTournamentHistory, terminateAllEngines]);
 
+  const archiveTournamentSnapshot = useCallback(async () => {
+    if (historyArchiveInFlightRef.current) return;
+
+    const current = stateRef.current;
+    if (current.status === "idle") return;
+    if (current.entrants.length === 0) return;
+
+    historyArchiveInFlightRef.current = true;
+    try {
+      const savedId = await saveTournamentHistory(current, {
+        id: historyRecordIdRef.current ?? undefined,
+      });
+      historyRecordIdRef.current = savedId;
+      await refreshTournamentHistory();
+    } catch {
+      // Ignore archival failures.
+    } finally {
+      historyArchiveInFlightRef.current = false;
+    }
+  }, [refreshTournamentHistory]);
+
+  useEffect(() => {
+    if (
+      state.status !== "running" &&
+      state.status !== "paused" &&
+      state.status !== "error"
+    ) {
+      return;
+    }
+    if (typeof window === "undefined") return;
+
+    void archiveTournamentSnapshot();
+    const interval = window.setInterval(() => {
+      void archiveTournamentSnapshot();
+    }, 5000);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [archiveTournamentSnapshot, state.status]);
+
   useEffect(() => {
     if (state.status !== "completed") return;
-    if (completionArchivedRef.current) return;
-    completionArchivedRef.current = true;
-
-    void (async () => {
-      try {
-        await saveTournamentHistory(stateRef.current);
-        await refreshTournamentHistory();
-      } catch {
-        // Ignore archival failures.
-      }
-    })();
-  }, [refreshTournamentHistory, state.status]);
+    void archiveTournamentSnapshot();
+  }, [archiveTournamentSnapshot, state.status]);
 
   const setStandingsFromCurrent = useCallback(
     (entrants: TournamentEntrant[]) => {
@@ -824,6 +922,9 @@ export function useTournamentRunner() {
           match.status === "finished" &&
           match.result !== "*",
       ).length;
+      const maxTiebreakGames = clampMaxTiebreakGames(prev.maxTiebreakGames);
+      const tiebreakWinBy = clampTiebreakWinBy(prev.tiebreakWinBy);
+      const tiebreakMode = normalizeTiebreakMode(prev.tiebreakMode);
 
       let nextMatches = prev.matches;
       let nextSeries: TournamentSeries = {
@@ -832,6 +933,34 @@ export function useTournamentRunner() {
         blackScore,
       };
       let resolvedWinner: string | null | undefined;
+      const enqueueNextTiebreakGame = () => {
+        const nextSeriesGameIndex =
+          Math.max(...seriesMatches.map((item) => item.seriesGameIndex), 0) + 1;
+        const colors = getSeriesGameColors(series, nextSeriesGameIndex);
+        const newMatchId = `${series.id}-g${nextSeriesGameIndex}`;
+
+        const newMatch: TournamentMatch = {
+          id: newMatchId,
+          seriesId: series.id,
+          seriesGameIndex: nextSeriesGameIndex,
+          round: series.round,
+          board: series.board,
+          whiteEntrantId: colors.whiteEntrantId,
+          blackEntrantId: colors.blackEntrantId,
+          status: "waiting",
+          result: "*",
+          moves: [],
+          fenHistory: [START_FEN],
+          evalHistory: [],
+          pgn: "",
+        };
+
+        nextMatches = [...prev.matches, newMatch];
+        nextSeries = {
+          ...nextSeries,
+          gameIds: [...nextSeries.gameIds, newMatchId],
+        };
+      };
 
       if (plannedFinished < series.plannedGames) {
         const remainingPlanned = series.plannedGames - plannedFinished;
@@ -860,43 +989,38 @@ export function useTournamentRunner() {
           });
         }
       } else {
-        if (whiteScore !== blackScore) {
-          if (!pendingAny) {
-            resolvedWinner =
-              whiteScore > blackScore
-                ? series.whiteEntrantId
-                : series.blackEntrantId;
+        const scoreDiff = Math.abs(whiteScore - blackScore);
+        const hasLeader = scoreDiff > 0;
+        const leadingEntrantId =
+          whiteScore > blackScore
+            ? series.whiteEntrantId
+            : whiteScore < blackScore
+              ? series.blackEntrantId
+              : null;
+
+        if (!hasLeader) {
+          if (!pendingTieBreak) {
+            if (maxTiebreakGames <= 0 || tieBreakFinished >= maxTiebreakGames) {
+              resolvedWinner = null;
+            } else {
+              enqueueNextTiebreakGame();
+            }
           }
         } else {
-          if (tieBreakFinished >= MAX_TIEBREAK_GAMES && !pendingTieBreak) {
-            resolvedWinner = null;
+          const requiresLeadMargin =
+            tiebreakMode === "win_by" && tieBreakFinished > 0;
+          const leadSatisfied = !requiresLeadMargin || scoreDiff >= tiebreakWinBy;
+
+          if (leadSatisfied) {
+            if (!pendingAny && leadingEntrantId) {
+              resolvedWinner = leadingEntrantId;
+            }
           } else if (!pendingTieBreak) {
-            const nextSeriesGameIndex =
-              Math.max(...seriesMatches.map((item) => item.seriesGameIndex), 0) + 1;
-            const colors = getSeriesGameColors(series, nextSeriesGameIndex);
-            const newMatchId = `${series.id}-g${nextSeriesGameIndex}`;
-
-            const newMatch: TournamentMatch = {
-              id: newMatchId,
-              seriesId: series.id,
-              seriesGameIndex: nextSeriesGameIndex,
-              round: series.round,
-              board: series.board,
-              whiteEntrantId: colors.whiteEntrantId,
-              blackEntrantId: colors.blackEntrantId,
-              status: "waiting",
-              result: "*",
-              moves: [],
-              fenHistory: [START_FEN],
-              evalHistory: [],
-              pgn: "",
-            };
-
-            nextMatches = [...prev.matches, newMatch];
-            nextSeries = {
-              ...nextSeries,
-              gameIds: [...nextSeries.gameIds, newMatchId],
-            };
+            if (maxTiebreakGames <= 0 || tieBreakFinished >= maxTiebreakGames) {
+              resolvedWinner = null;
+            } else {
+              enqueueNextTiebreakGame();
+            }
           }
         }
       }
@@ -1169,8 +1293,9 @@ export function useTournamentRunner() {
               ),
             }));
 
-            if (!game.isGameOver() && MOVE_DELAY_MS > 0) {
-              const delayMs = Math.min(MOVE_DELAY_MS, Math.max(0, remainingMs()));
+            const moveDelayMs = clampMoveDelayMs(stateRef.current.moveDelayMs);
+            if (!game.isGameOver() && moveDelayMs > 0) {
+              const delayMs = Math.min(moveDelayMs, Math.max(0, remainingMs()));
               if (delayMs <= 0) {
                 adjudicateTimeoutDraw();
                 break;
@@ -1589,7 +1714,7 @@ export function useTournamentRunner() {
       runIdRef.current += 1;
       const runId = runIdRef.current;
       terminateAllEngines();
-      completionArchivedRef.current = false;
+      historyRecordIdRef.current = createHistoryRecordId();
 
       byeMatchPointsRef.current = new Map();
       byeGamePointsRef.current = new Map();
@@ -1603,6 +1728,10 @@ export function useTournamentRunner() {
         bestOf: runConfig.bestOf,
         swissRounds: runConfig.swissRounds,
         maxSimultaneousGames: runConfig.maxSimultaneousGames,
+        tiebreakMode: runConfig.tiebreakMode,
+        maxTiebreakGames: runConfig.maxTiebreakGames,
+        tiebreakWinBy: runConfig.tiebreakWinBy,
+        moveDelayMs: MOVE_DELAY_DEFAULT_MS,
         currentRound: 0,
         totalRounds: runConfig.totalRounds,
         entrants: runConfig.entrants,
@@ -1929,12 +2058,24 @@ export function useTournamentRunner() {
   const resetTournament = useCallback(() => {
     runIdRef.current += 1;
     terminateAllEngines();
-    completionArchivedRef.current = false;
+    historyRecordIdRef.current = null;
     byeMatchPointsRef.current = new Map();
     byeGamePointsRef.current = new Map();
     byeRecipientsRef.current = new Set();
     setRuntime(makeInitialState);
   }, [setRuntime, terminateAllEngines]);
+
+  const setMoveDelayMs = useCallback(
+    (moveDelayMs: number) => {
+      const nextDelay = clampMoveDelayMs(moveDelayMs);
+      setRuntime((prev) =>
+        prev.moveDelayMs === nextDelay
+          ? prev
+          : { ...prev, moveDelayMs: nextDelay },
+      );
+    },
+    [setRuntime],
+  );
 
   const openSavedTournament = useCallback(
     async (id: string): Promise<boolean> => {
@@ -1943,13 +2084,17 @@ export function useTournamentRunner() {
 
       runIdRef.current += 1;
       terminateAllEngines();
-      completionArchivedRef.current = true;
+      historyRecordIdRef.current = id;
       byeMatchPointsRef.current = new Map();
       byeGamePointsRef.current = new Map();
       byeRecipientsRef.current = new Set();
 
       setRuntime(() => ({
         ...restored,
+        moveDelayMs: clampMoveDelayMs(restored.moveDelayMs),
+        tiebreakMode: normalizeTiebreakMode(restored.tiebreakMode),
+        maxTiebreakGames: clampMaxTiebreakGames(restored.maxTiebreakGames),
+        tiebreakWinBy: clampTiebreakWinBy(restored.tiebreakWinBy),
         status: restored.status === "running" ? "paused" : restored.status,
         selectedMatchId: null,
       }));
@@ -2041,6 +2186,7 @@ export function useTournamentRunner() {
     openSavedTournament,
     resumeTournament,
     pauseTournament,
+    setMoveDelayMs,
     restartMatch,
     restartGameFromScratch,
     markMatchDraw,

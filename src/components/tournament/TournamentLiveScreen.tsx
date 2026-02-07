@@ -14,6 +14,7 @@ interface TournamentLiveScreenProps {
   onSelectMatch: (matchId: string) => void;
   onResume: () => void;
   onPause: () => void;
+  onSetMoveDelayMs: (moveDelayMs: number) => void;
   onDownloadPgn: () => boolean;
   canDownloadPgn: boolean;
   onReset: () => void;
@@ -29,9 +30,12 @@ function getInitialRoundViewMode(): RoundViewMode {
 }
 
 function statusBadgeClass(status: string): string {
-  if (status === "running") return "bg-blue-900/60 text-blue-200 border-blue-600/50";
-  if (status === "finished") return "bg-emerald-900/60 text-emerald-200 border-emerald-600/50";
-  if (status === "cancelled") return "bg-amber-900/60 text-amber-200 border-amber-600/50";
+  if (status === "running")
+    return "bg-blue-900/60 text-blue-200 border-blue-600/50";
+  if (status === "finished")
+    return "bg-emerald-900/60 text-emerald-200 border-emerald-600/50";
+  if (status === "cancelled")
+    return "bg-amber-900/60 text-amber-200 border-amber-600/50";
   if (status === "error") return "bg-red-900/60 text-red-200 border-red-600/50";
   return "bg-slate-800 text-slate-300 border-slate-600/50";
 }
@@ -41,8 +45,10 @@ function tournamentStatusClass(status: string): string {
     return "bg-emerald-900/50 border-emerald-700/50 text-emerald-200";
   }
   if (status === "error") return "bg-red-900/40 border-red-700/50 text-red-200";
-  if (status === "running") return "bg-blue-900/40 border-blue-700/50 text-blue-200";
-  if (status === "paused") return "bg-amber-900/40 border-amber-700/50 text-amber-200";
+  if (status === "running")
+    return "bg-blue-900/40 border-blue-700/50 text-blue-200";
+  if (status === "paused")
+    return "bg-amber-900/40 border-amber-700/50 text-amber-200";
   return "bg-slate-800 border-slate-700 text-gray-200";
 }
 
@@ -77,6 +83,7 @@ export function TournamentLiveScreen({
   onSelectMatch,
   onResume,
   onPause,
+  onSetMoveDelayMs,
   onDownloadPgn,
   canDownloadPgn,
   onReset,
@@ -88,14 +95,22 @@ export function TournamentLiveScreen({
 
   const currentRound = state.currentRound || 1;
   const maxRound = Math.max(1, state.totalRounds || 1);
+  const tiebreakLabel =
+    state.maxTiebreakGames <= 0
+      ? "No tiebreaks"
+      : state.tiebreakMode === "win_by"
+        ? `TB max ${state.maxTiebreakGames}, win by ${state.tiebreakWinBy}`
+        : `TB max ${state.maxTiebreakGames}`;
   const [visibleRound, setVisibleRound] = useState(currentRound);
   const [followCurrentRound, setFollowCurrentRound] = useState(true);
+  const [playerFilter, setPlayerFilter] = useState("");
   const [roundViewMode, setRoundViewMode] = useState<RoundViewMode>(
     getInitialRoundViewMode,
   );
-  const [boardViewIndices, setBoardViewIndices] = useState<Record<number, number>>(
-    {},
-  );
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [boardViewIndices, setBoardViewIndices] = useState<
+    Record<number, number>
+  >({});
   const boardManualSelectionRef = useRef<Record<number, boolean>>({});
 
   useEffect(() => {
@@ -112,13 +127,46 @@ export function TournamentLiveScreen({
   }, [currentRound, followCurrentRound]);
 
   useEffect(() => {
+    if (!showResetConfirm) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowResetConfirm(false);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showResetConfirm]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(ROUND_VIEW_MODE_STORAGE_KEY, roundViewMode);
   }, [roundViewMode]);
 
-  const roundMatches = state.matches.filter((match) => match.round === visibleRound);
-  const pendingMatches = roundMatches.filter((match) => match.status === "waiting");
-  const boardVisibleMatches = roundMatches
+  const roundMatches = useMemo(
+    () => state.matches.filter((match) => match.round === visibleRound),
+    [state.matches, visibleRound],
+  );
+  const normalizedPlayerFilter = playerFilter.trim().toLowerCase();
+  const filteredRoundMatches = useMemo(() => {
+    if (!normalizedPlayerFilter) return roundMatches;
+
+    return roundMatches.filter((match) => {
+      const whiteLabel =
+        entrantsById.get(match.whiteEntrantId)?.label ?? match.whiteEntrantId;
+      const blackLabel =
+        entrantsById.get(match.blackEntrantId)?.label ?? match.blackEntrantId;
+      return (
+        whiteLabel.toLowerCase().includes(normalizedPlayerFilter) ||
+        blackLabel.toLowerCase().includes(normalizedPlayerFilter)
+      );
+    });
+  }, [entrantsById, normalizedPlayerFilter, roundMatches]);
+  const pendingMatches = filteredRoundMatches.filter(
+    (match) => match.status === "waiting",
+  );
+  const boardVisibleMatches = filteredRoundMatches
     .filter((match) => match.status !== "waiting")
     .sort((a, b) => {
       const aPriority = matchStatusPriority(a.status);
@@ -129,7 +177,7 @@ export function TournamentLiveScreen({
     });
   const matchesByBoard = useMemo(() => {
     const byBoard = new Map<number, TournamentMatch[]>();
-    const sorted = [...roundMatches].sort((a, b) => {
+    const sorted = [...filteredRoundMatches].sort((a, b) => {
       if (a.board !== b.board) return a.board - b.board;
       if (a.seriesGameIndex !== b.seriesGameIndex) {
         return a.seriesGameIndex - b.seriesGameIndex;
@@ -150,7 +198,7 @@ export function TournamentLiveScreen({
     }
 
     return byBoard;
-  }, [roundMatches]);
+  }, [filteredRoundMatches]);
   const visibleBoards = useMemo(
     () => [...matchesByBoard.keys()].sort((a, b) => a - b),
     [matchesByBoard],
@@ -222,7 +270,10 @@ export function TournamentLiveScreen({
           continue;
         }
 
-        const clamped = Math.max(0, Math.min(boardMatches.length - 1, currentIndex));
+        const clamped = Math.max(
+          0,
+          Math.min(boardMatches.length - 1, currentIndex),
+        );
         if (clamped !== currentIndex) {
           next[board] = clamped;
           changed = true;
@@ -315,7 +366,9 @@ export function TournamentLiveScreen({
 
     setBoardViewIndices((prev) => {
       const fallbackIndex = getDefaultBoardGameIndex(boardMatches);
-      const currentIndex = Number.isFinite(prev[board]) ? prev[board] : fallbackIndex;
+      const currentIndex = Number.isFinite(prev[board])
+        ? prev[board]
+        : fallbackIndex;
       const nextIndex = Math.max(
         0,
         Math.min(boardMatches.length - 1, currentIndex + direction),
@@ -349,8 +402,7 @@ export function TournamentLiveScreen({
     currentRound < state.totalRounds &&
     !hasPlayableOrRetryable &&
     state.series.some(
-      (series) =>
-        series.round === currentRound && series.status !== "waiting",
+      (series) => series.round === currentRound && series.status !== "waiting",
     );
 
   const gameModeStandings = useMemo<StandingRow[]>(() => {
@@ -421,18 +473,40 @@ export function TournamentLiveScreen({
   }, [state.entrants, state.matches, state.standings]);
 
   return (
-    <div className="w-full max-w-7xl mx-auto p-4 md:p-6 flex flex-col gap-4">
+    <div className="w-full mx-auto p-4 md:p-6 flex flex-col gap-4">
       <div className="flex flex-wrap gap-3 items-center justify-between">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-100">Tournament Live</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-100">
+            Tournament Live
+          </h1>
           <p className="text-sm text-gray-400 mt-1">
             {state.format === "round_robin" ? "Round Robin" : "Swiss"} · Round{" "}
-            {currentRound}/{state.totalRounds || 1} · Best-of {state.bestOf} · Concurrency{" "}
-            {state.maxSimultaneousGames}
+            {currentRound}/{state.totalRounds || 1} · Best-of {state.bestOf} ·
+            Concurrency {state.maxSimultaneousGames} · {tiebreakLabel}
           </p>
         </div>
 
-        <div className="flex gap-2 text-sm">
+        <div className="flex items-center flex-wrap gap-2 text-sm">
+          <label className="rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 min-w-[220px]">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs text-gray-300">Move delay</span>
+              <span className="text-xs text-gray-400">
+                {state.moveDelayMs} ms
+              </span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="1000"
+              step="1"
+              value={state.moveDelayMs}
+              onChange={(event) =>
+                onSetMoveDelayMs(parseInt(event.target.value, 10))
+              }
+              className="mt-1 w-full accent-emerald-500"
+              aria-label="Move delay in milliseconds"
+            />
+          </label>
           <div
             className={`px-3 py-2 rounded-lg border ${tournamentStatusClass(state.status)}`}
           >
@@ -470,7 +544,7 @@ export function TournamentLiveScreen({
             Download PGN
           </button>
           <button
-            onClick={onReset}
+            onClick={() => setShowResetConfirm(true)}
             className="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg"
           >
             New Tournament
@@ -500,7 +574,7 @@ export function TournamentLiveScreen({
 
       <div className="grid lg:grid-cols-[2fr,1fr] gap-4">
         <section className="bg-slate-900/80 border border-slate-700 rounded-xl p-3">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
@@ -563,122 +637,159 @@ export function TournamentLiveScreen({
                 </button>
               </div>
             </div>
-            <p className="text-xs text-gray-400">
-              Round progress {roundProgress} · Total finished {overallFinished}/{state.matches.length}
-            </p>
+            <div className="flex items-center gap-2">
+              <input
+                value={playerFilter}
+                onChange={(event) => setPlayerFilter(event.target.value)}
+                placeholder="Filter by player"
+                className="px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-xs text-gray-200 placeholder:text-gray-500 w-44"
+              />
+              {playerFilter.trim() && (
+                <button
+                  type="button"
+                  onClick={() => setPlayerFilter("")}
+                  className="px-2 py-1.5 rounded border border-slate-700 bg-slate-800 text-xs text-gray-300 hover:bg-slate-700"
+                >
+                  Clear
+                </button>
+              )}
+              <p className="text-xs text-gray-400">
+                Round progress {roundProgress} · Total finished {overallFinished}/
+                {state.matches.length}
+                {normalizedPlayerFilter
+                  ? ` · Showing ${filteredRoundMatches.length}/${roundMatches.length}`
+                  : ""}
+              </p>
+            </div>
           </div>
 
           {roundMatches.length === 0 ? (
             <p className="text-sm text-gray-500 py-8 text-center">
               Waiting for pairings...
             </p>
+          ) : filteredRoundMatches.length === 0 ? (
+            <p className="text-sm text-gray-500 py-8 text-center">
+              No games match this player filter.
+            </p>
           ) : roundViewMode === "board" ? (
             <div className="flex flex-col gap-3">
               <h3 className="text-xs font-medium uppercase tracking-wide text-gray-400">
                 Boards ({boardCards.length})
               </h3>
-              <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
-                {boardCards.map(({ board, matches, selectedIndex, selectedMatch, standing }) => {
-                  const white = entrantsById.get(selectedMatch.whiteEntrantId) as
-                    | TournamentEntrant
-                    | undefined;
-                  const black = entrantsById.get(selectedMatch.blackEntrantId) as
-                    | TournamentEntrant
-                    | undefined;
+              <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                {boardCards.map(
+                  ({
+                    board,
+                    matches,
+                    selectedIndex,
+                    selectedMatch,
+                    standing,
+                  }) => {
+                    const white = entrantsById.get(
+                      selectedMatch.whiteEntrantId,
+                    ) as TournamentEntrant | undefined;
+                    const black = entrantsById.get(
+                      selectedMatch.blackEntrantId,
+                    ) as TournamentEntrant | undefined;
 
-                  return (
-                    <div
-                      key={`board-${board}`}
-                      className="rounded-lg border border-slate-700 bg-slate-800/60 p-3"
-                    >
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <p className="text-xs text-gray-300">Board {board}</p>
-                        <div className="relative group/scorett">
-                          <p className="text-xs text-gray-300 cursor-help px-1.5 py-0.5 rounded border border-slate-600/70 bg-slate-800/70 hover:bg-slate-700/70 transition-colors">
-                            {standing.white.toFixed(1)} - {standing.black.toFixed(1)}
-                          </p>
-                          <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2.5 py-1.5 bg-slate-700 border border-slate-600 text-xs text-gray-200 rounded-md whitespace-nowrap opacity-0 pointer-events-none group-hover/scorett:opacity-100 transition-opacity duration-150 shadow-lg z-50">
-                            <div>White wins: {standing.whiteWins}</div>
-                            <div>Black wins: {standing.blackWins}</div>
-                            <div>Draws: {standing.draws}</div>
+                    return (
+                      <div
+                        key={`board-${board}`}
+                        className="rounded-lg border border-slate-700 bg-slate-800/60 p-3"
+                      >
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <p className="text-xs text-gray-300">Board {board}</p>
+                          <div className="relative group/scorett">
+                            <p className="text-xs text-gray-300 cursor-help px-1.5 py-0.5 rounded border border-slate-600/70 bg-slate-800/70 hover:bg-slate-700/70 transition-colors">
+                              {standing.white.toFixed(1)} -{" "}
+                              {standing.black.toFixed(1)}
+                            </p>
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2.5 py-1.5 bg-slate-700 border border-slate-600 text-xs text-gray-200 rounded-md whitespace-nowrap opacity-0 pointer-events-none group-hover/scorett:opacity-100 transition-opacity duration-150 shadow-lg z-50">
+                              <div>White wins: {standing.whiteWins}</div>
+                              <div>Black wins: {standing.blackWins}</div>
+                              <div>Draws: {standing.draws}</div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => updateBoardGameIndex(board, -1)}
+                              disabled={selectedIndex <= 0}
+                              className="w-6 h-6 rounded border border-slate-600 bg-slate-800 text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                              title="Previous game on this board"
+                              aria-label="Previous game on this board"
+                            >
+                              ←
+                            </button>
+                            <span className="text-[10px] text-gray-400 min-w-12 text-center">
+                              {selectedMatch.seriesGameIndex}/{matches.length}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => updateBoardGameIndex(board, 1)}
+                              disabled={selectedIndex >= matches.length - 1}
+                              className="w-6 h-6 rounded border border-slate-600 bg-slate-800 text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                              title="Next game on this board"
+                              aria-label="Next game on this board"
+                            >
+                              →
+                            </button>
                           </div>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => updateBoardGameIndex(board, -1)}
-                            disabled={selectedIndex <= 0}
-                            className="w-6 h-6 rounded border border-slate-600 bg-slate-800 text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
-                            title="Previous game on this board"
-                            aria-label="Previous game on this board"
-                          >
-                            ←
-                          </button>
-                          <span className="text-[10px] text-gray-400 min-w-12 text-center">
-                            {selectedMatch.seriesGameIndex}/{matches.length}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => updateBoardGameIndex(board, 1)}
-                            disabled={selectedIndex >= matches.length - 1}
-                            className="w-6 h-6 rounded border border-slate-600 bg-slate-800 text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
-                            title="Next game on this board"
-                            aria-label="Next game on this board"
-                          >
-                            →
-                          </button>
+
+                        <div className="mb-3">
+                          <TournamentMiniBoard
+                            id={`board-${board}-${selectedMatch.id}`}
+                            position={
+                              selectedMatch.fenHistory[
+                                selectedMatch.fenHistory.length - 1
+                              ] ?? selectedMatch.fenHistory[0]
+                            }
+                          />
                         </div>
-                      </div>
 
-                      <div className="mb-3">
-                        <TournamentMiniBoard
-                          id={`board-${board}-${selectedMatch.id}`}
-                          position={
-                            selectedMatch.fenHistory[selectedMatch.fenHistory.length - 1] ??
-                            selectedMatch.fenHistory[0]
-                          }
-                        />
-                      </div>
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <p className="text-xs text-gray-400">
+                            Game {selectedMatch.seriesGameIndex}
+                          </p>
+                          <span
+                            className={`text-[10px] px-2 py-0.5 rounded-full border ${statusBadgeClass(selectedMatch.status)}`}
+                          >
+                            {selectedMatch.status}
+                          </span>
+                        </div>
 
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <p className="text-xs text-gray-400">
-                          Game {selectedMatch.seriesGameIndex}
+                        <p className="text-sm text-gray-100 truncate">
+                          {white?.label ?? selectedMatch.whiteEntrantId}
                         </p>
-                        <span
-                          className={`text-[10px] px-2 py-0.5 rounded-full border ${statusBadgeClass(selectedMatch.status)}`}
+                        <p className="text-xs text-gray-500 my-1">vs</p>
+                        <p className="text-sm text-gray-100 truncate">
+                          {black?.label ?? selectedMatch.blackEntrantId}
+                        </p>
+
+                        <div className="mt-3 text-xs text-gray-400 flex items-center justify-between">
+                          <span>
+                            Moves: {toFullMoveCount(selectedMatch.moves.length)}
+                          </span>
+                          <span>
+                            Result:{" "}
+                            {selectedMatch.status === "cancelled"
+                              ? "cancelled"
+                              : selectedMatch.result}
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => onSelectMatch(selectedMatch.id)}
+                          className="mt-3 w-full px-2.5 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-xs text-gray-100"
                         >
-                          {selectedMatch.status}
-                        </span>
+                          Open Game
+                        </button>
                       </div>
-
-                      <p className="text-sm text-gray-100 truncate">
-                        {white?.label ?? selectedMatch.whiteEntrantId}
-                      </p>
-                      <p className="text-xs text-gray-500 my-1">vs</p>
-                      <p className="text-sm text-gray-100 truncate">
-                        {black?.label ?? selectedMatch.blackEntrantId}
-                      </p>
-
-                      <div className="mt-3 text-xs text-gray-400 flex items-center justify-between">
-                        <span>Moves: {toFullMoveCount(selectedMatch.moves.length)}</span>
-                        <span>
-                          Result:{" "}
-                          {selectedMatch.status === "cancelled"
-                            ? "cancelled"
-                            : selectedMatch.result}
-                        </span>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => onSelectMatch(selectedMatch.id)}
-                        className="mt-3 w-full px-2.5 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-xs text-gray-100"
-                      >
-                        Open Game
-                      </button>
-                    </div>
-                  );
-                })}
+                    );
+                  },
+                )}
               </div>
             </div>
           ) : (
@@ -688,10 +799,14 @@ export function TournamentLiveScreen({
                   <h3 className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-2">
                     Live / Completed
                   </h3>
-                  <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                  <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                     {boardVisibleMatches.map((match) => {
-                      const white = entrantsById.get(match.whiteEntrantId) as TournamentEntrant | undefined;
-                      const black = entrantsById.get(match.blackEntrantId) as TournamentEntrant | undefined;
+                      const white = entrantsById.get(match.whiteEntrantId) as
+                        | TournamentEntrant
+                        | undefined;
+                      const black = entrantsById.get(match.blackEntrantId) as
+                        | TournamentEntrant
+                        | undefined;
 
                       return (
                         <button
@@ -729,9 +844,14 @@ export function TournamentLiveScreen({
                           </p>
 
                           <div className="mt-3 text-xs text-gray-400 flex items-center justify-between">
-                            <span>Moves: {toFullMoveCount(match.moves.length)}</span>
                             <span>
-                              Result: {match.status === "cancelled" ? "cancelled" : match.result}
+                              Moves: {toFullMoveCount(match.moves.length)}
+                            </span>
+                            <span>
+                              Result:{" "}
+                              {match.status === "cancelled"
+                                ? "cancelled"
+                                : match.result}
                             </span>
                           </div>
                         </button>
@@ -748,8 +868,12 @@ export function TournamentLiveScreen({
                   </h3>
                   <div className="space-y-2">
                     {pendingMatches.map((match) => {
-                      const white = entrantsById.get(match.whiteEntrantId) as TournamentEntrant | undefined;
-                      const black = entrantsById.get(match.blackEntrantId) as TournamentEntrant | undefined;
+                      const white = entrantsById.get(match.whiteEntrantId) as
+                        | TournamentEntrant
+                        | undefined;
+                      const black = entrantsById.get(match.blackEntrantId) as
+                        | TournamentEntrant
+                        | undefined;
 
                       return (
                         <button
@@ -789,19 +913,54 @@ export function TournamentLiveScreen({
         </div>
       </div>
 
-      <div className="grid xl:grid-cols-2 gap-4">
-        <TournamentCrossTable
-          standings={state.standings}
-          matches={state.matches}
-          series={state.series}
-          mode="series"
+      <TournamentCrossTable
+        seriesStandings={state.standings}
+        gameStandings={gameModeStandings}
+        matches={state.matches}
+        series={state.series}
+      />
+
+      <div
+        className={`fixed inset-0 z-50 flex items-center justify-center transition-opacity duration-200 ${
+          showResetConfirm
+            ? "opacity-100 pointer-events-auto"
+            : "opacity-0 pointer-events-none"
+        }`}
+      >
+        <div
+          className="absolute inset-0 bg-black/60"
+          onClick={() => setShowResetConfirm(false)}
         />
-        <TournamentCrossTable
-          standings={gameModeStandings}
-          matches={state.matches}
-          series={state.series}
-          mode="games"
-        />
+        <div
+          className={`relative bg-slate-800 border border-slate-600 rounded-xl p-6 max-w-sm mx-4 shadow-2xl transition-transform duration-200 ${
+            showResetConfirm ? "scale-100" : "scale-95"
+          }`}
+        >
+          <h3 className="text-lg font-semibold text-gray-100 mb-2">
+            Start a new tournament?
+          </h3>
+          <p className="text-sm text-gray-400 mb-5">
+            This will reset the current tournament view and return to setup. Are
+            you sure?
+          </p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowResetConfirm(false)}
+              className="flex-1 py-2 bg-slate-700 hover:bg-slate-600 text-gray-300 rounded-lg font-medium transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                setShowResetConfirm(false);
+                onReset();
+              }}
+              className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors"
+            >
+              New Tournament
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

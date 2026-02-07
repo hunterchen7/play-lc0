@@ -1,6 +1,7 @@
 import type { NetworkInfo } from "../constants/networks";
 
 export type TournamentFormat = "round_robin" | "swiss";
+export type TournamentTiebreakMode = "capped" | "win_by";
 
 export type MatchStatus =
   | "waiting"
@@ -28,6 +29,9 @@ export interface TournamentSetupConfig {
   bestOf: number;
   maxSimultaneousGames: number;
   swissRounds: number;
+  tiebreakMode: TournamentTiebreakMode;
+  maxTiebreakGames: number;
+  tiebreakWinBy: number;
 }
 
 export interface TournamentPairing {
@@ -112,6 +116,10 @@ export interface TournamentRuntimeState {
   bestOf: number;
   swissRounds: number;
   maxSimultaneousGames: number;
+  tiebreakMode: TournamentTiebreakMode;
+  maxTiebreakGames: number;
+  tiebreakWinBy: number;
+  moveDelayMs: number;
   currentRound: number;
   totalRounds: number;
   entrants: TournamentEntrant[];
