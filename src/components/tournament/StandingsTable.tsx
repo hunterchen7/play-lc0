@@ -1,14 +1,16 @@
 import { useMemo, useState } from "react";
-import type { StandingRow } from "../../types/tournament";
+import type { StandingRow, TournamentEntrant } from "../../types/tournament";
 
 interface StandingsTableProps {
   seriesStandings: StandingRow[];
   gameStandings: StandingRow[];
+  entrants: TournamentEntrant[];
 }
 
 type SortColumn =
   | "default"
   | "name"
+  | "elo"
   | "seriesPoints"
   | "gamePoints"
   | "seriesRecord"
@@ -25,6 +27,9 @@ interface HeaderWithTooltipProps {
 interface CombinedStandingRow {
   entrantId: string;
   label: string;
+  elo: string;
+  eloLow: number;
+  eloHigh: number;
   seriesPoints: number;
   gamePoints: number;
   seriesWins: number;
@@ -36,6 +41,10 @@ interface CombinedStandingRow {
   seriesTiebreak: number;
   gameTiebreak: number;
 }
+
+const RANK_COL_CLASS = "py-2 pr-2 w-12 whitespace-nowrap";
+const RATING_COL_CLASS = "py-2 pr-2 w-36 whitespace-nowrap";
+const ENTRANT_COL_CLASS = "py-2 pr-2 w-72";
 
 function HeaderWithTooltip({ label, tooltip }: HeaderWithTooltipProps) {
   return (
@@ -72,9 +81,25 @@ function compareRecord(
   return bLosses - aLosses;
 }
 
+function parseEloBounds(elo: string): { low: number; high: number } {
+  const values = (elo.match(/\d+/g) ?? [])
+    .map((value) => parseInt(value, 10))
+    .filter((value) => Number.isFinite(value));
+
+  if (values.length === 0) return { low: 0, high: 0 };
+  if (values.length === 1) return { low: values[0], high: values[0] };
+  const first = values[0];
+  const second = values[1];
+  return {
+    low: Math.min(first, second),
+    high: Math.max(first, second),
+  };
+}
+
 export function StandingsTable({
   seriesStandings,
   gameStandings,
+  entrants,
 }: StandingsTableProps) {
   const [sortColumn, setSortColumn] = useState<SortColumn>("default");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -83,12 +108,19 @@ export function StandingsTable({
     const gamesByEntrantId = new Map(
       gameStandings.map((row) => [row.entrantId, row]),
     );
+    const entrantsById = new Map(entrants.map((entrant) => [entrant.id, entrant]));
 
     return seriesStandings.map((seriesRow) => {
       const gameRow = gamesByEntrantId.get(seriesRow.entrantId);
+      const entrant = entrantsById.get(seriesRow.entrantId);
+      const elo = entrant?.network.elo ?? "N/A";
+      const eloBounds = parseEloBounds(elo);
       return {
         entrantId: seriesRow.entrantId,
         label: seriesRow.label,
+        elo,
+        eloLow: eloBounds.low,
+        eloHigh: eloBounds.high,
         seriesPoints: seriesRow.matchPoints,
         gamePoints: gameRow?.gamePoints ?? 0,
         seriesWins: seriesRow.wins,
@@ -101,7 +133,7 @@ export function StandingsTable({
         gameTiebreak: gameRow?.buchholz ?? 0,
       };
     });
-  }, [gameStandings, seriesStandings]);
+  }, [entrants, gameStandings, seriesStandings]);
 
   const sortedRows = useMemo(() => {
     if (sortColumn === "default") return rows;
@@ -110,6 +142,12 @@ export function StandingsTable({
       let cmp = 0;
       if (sortColumn === "name") {
         cmp = a.label.localeCompare(b.label);
+      } else if (sortColumn === "elo") {
+        if (a.eloLow !== b.eloLow) {
+          cmp = a.eloLow - b.eloLow;
+        } else {
+          cmp = a.eloHigh - b.eloHigh;
+        }
       } else if (sortColumn === "seriesPoints") {
         cmp = a.seriesPoints - b.seriesPoints;
       } else if (sortColumn === "gamePoints") {
@@ -170,7 +208,7 @@ export function StandingsTable({
         <table className="w-full text-xs text-left">
           <thead className="text-gray-400 border-b border-slate-700">
             <tr>
-              <th className="py-2 pr-2">
+              <th className={RANK_COL_CLASS}>
                 <button
                   type="button"
                   onClick={() => toggleSort("default")}
@@ -180,7 +218,17 @@ export function StandingsTable({
                   #{sortIndicator(sortColumn, sortDirection, "default")}
                 </button>
               </th>
-              <th className="py-2 pr-2">
+              <th className={RATING_COL_CLASS}>
+                <button
+                  type="button"
+                  onClick={() => toggleSort("elo")}
+                  className="hover:text-gray-200 transition-colors"
+                  title="Sort by rating"
+                >
+                  Rating{sortIndicator(sortColumn, sortDirection, "elo")}
+                </button>
+              </th>
+              <th className={ENTRANT_COL_CLASS}>
                 <button
                   type="button"
                   onClick={() => toggleSort("name")}
@@ -278,8 +326,13 @@ export function StandingsTable({
                   row.entrantId === leaderEntrantId ? "text-emerald-300" : "text-gray-200"
                 }`}
               >
-                <td className="py-2 pr-2">{idx + 1}</td>
-                <td className="py-2 pr-2">{row.label}</td>
+                <td className={RANK_COL_CLASS}>{idx + 1}</td>
+                <td
+                  className={`${RATING_COL_CLASS} text-gray-300 text-[11px]`}
+                >
+                  {row.elo}
+                </td>
+                <td className={ENTRANT_COL_CLASS}>{row.label}</td>
                 <td className="py-2 pr-2">{row.seriesPoints.toFixed(1)}</td>
                 <td className="py-2 pr-2 font-medium">{row.gamePoints.toFixed(1)}</td>
                 <td className="py-2 pr-2">
@@ -294,7 +347,7 @@ export function StandingsTable({
             ))}
             {sortedRows.length === 0 && (
               <tr>
-                <td colSpan={8} className="py-3 text-center text-gray-500">
+                <td colSpan={9} className="py-3 text-center text-gray-500">
                   No games yet
                 </td>
               </tr>

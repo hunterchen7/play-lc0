@@ -89,6 +89,19 @@ npm install
 npm run dev
 ```
 
+## Tournament Engine Memory Estimates
+
+Tournament live view shows an estimated engine memory footprint based on per-model measurements.
+
+- Source of estimates: `src/constants/networks.ts` (`estimatedRuntimeMb` per network)
+- How values are generated: offline benchmark with `onnxruntime-node`
+- Command: `npm run bench:model-memory`
+- Benchmark method: load model, build ONNX session, measure RSS delta, then store `round(peakDeltaMb * 1.2)` as a conservative estimate
+
+Notes:
+- This is an approximation for planning/concurrency, not an exact browser WebGPU VRAM reading.
+- Re-run the benchmark after changing model files or ONNX runtime versions.
+
 ### ONNX Models
 
 Place pre-converted ONNX model files in `public/models/`. Models are not included in the repo due to size.

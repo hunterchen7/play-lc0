@@ -817,7 +817,12 @@ export function TournamentSetupScreen({
         <div className="grid xl:grid-cols-[2fr,1fr] gap-5">
           <section className="bg-slate-900/80 border border-slate-700 rounded-xl p-4">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-100">Entrants</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-gray-100">Entrants</h2>
+                <span className="text-xs px-2 py-0.5 rounded-full border border-slate-600 bg-slate-800 text-gray-300">
+                  {entrants.length}
+                </span>
+              </div>
               <button
                 onClick={openAddModal}
                 className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-sm"
@@ -1170,10 +1175,14 @@ export function TournamentSetupScreen({
                         <p className="text-sm font-medium text-gray-100 truncate">
                           {isOngoing
                             ? item.winnerLabel
-                              ? `Leader: ${item.winnerLabel}`
+                              ? item.winnerLabel.startsWith("Tie for 1st")
+                                ? item.winnerLabel
+                                : `Leader: ${item.winnerLabel}`
                               : "Ongoing tournament"
                             : item.winnerLabel
-                              ? `Winner: ${item.winnerLabel}`
+                              ? item.winnerLabel.startsWith("Tie for 1st")
+                                ? item.winnerLabel
+                                : `Winner: ${item.winnerLabel}`
                               : "Tournament"}
                         </p>
                         <span

@@ -69,6 +69,21 @@ function matchStatusPriority(status: string): number {
   return 5;
 }
 
+function standingTieKey(row: StandingRow): string {
+  return [
+    row.matchPoints.toFixed(4),
+    row.gamePoints.toFixed(4),
+    row.buchholz.toFixed(4),
+    row.wins,
+  ].join("|");
+}
+
+function getFirstPlaceRows(standings: StandingRow[]): StandingRow[] {
+  if (standings.length === 0) return [];
+  const topKey = standingTieKey(standings[0]);
+  return standings.filter((row) => standingTieKey(row) === topKey);
+}
+
 function getDefaultBoardGameIndex(matches: TournamentMatch[]): number {
   const runningIndex = matches.findIndex((match) => match.status === "running");
   if (runningIndex >= 0) return runningIndex;
@@ -399,6 +414,7 @@ export function TournamentLiveScreen({
   ).length;
   const isConcluded = state.status === "completed";
   const leader = state.standings[0];
+  const firstPlaceRows = getFirstPlaceRows(state.standings);
   const hasPlayableOrRetryable = state.matches.some((match) => {
     if (match.status === "waiting" || match.status === "running") return true;
     if (match.status === "error") return (match.retryCount ?? 0) < 6;
@@ -414,7 +430,7 @@ export function TournamentLiveScreen({
     );
 
   const gameModeStandings = useMemo<StandingRow[]>(() => {
-    const seriesById = new Map(
+    const seriesPointsByEntrantId = new Map(
       state.standings.map((row) => [row.entrantId, row.matchPoints]),
     );
     const rows = new Map<string, StandingRow>();
@@ -424,7 +440,7 @@ export function TournamentLiveScreen({
       rows.set(entrant.id, {
         entrantId: entrant.id,
         label: entrant.label,
-        matchPoints: seriesById.get(entrant.id) ?? 0,
+        matchPoints: seriesPointsByEntrantId.get(entrant.id) ?? 0,
         gamePoints: 0,
         wins: 0,
         draws: 0,
@@ -437,6 +453,9 @@ export function TournamentLiveScreen({
 
     for (const match of state.matches) {
       if (match.status !== "finished" || match.result === "*") continue;
+      const series = seriesById.get(match.seriesId);
+      if (!series) continue;
+      if (match.seriesGameIndex > series.plannedGames) continue;
 
       const whiteRow = rows.get(match.whiteEntrantId);
       const blackRow = rows.get(match.blackEntrantId);
@@ -478,7 +497,7 @@ export function TournamentLiveScreen({
       if (b.buchholz !== a.buchholz) return b.buchholz - a.buchholz;
       return a.label.localeCompare(b.label);
     });
-  }, [state.entrants, state.matches, state.standings]);
+  }, [seriesById, state.entrants, state.matches, state.standings]);
 
   return (
     <div className="w-full mx-auto p-4 md:p-6 flex flex-col gap-4">
@@ -537,7 +556,7 @@ export function TournamentLiveScreen({
           </label>
           <div className="rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 min-w-[220px]">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-xs text-gray-300">Engine memory (est.)</span>
+              <span className="text-xs text-gray-300">memory used (est.)</span>
               <span className="text-xs text-gray-400">
                 {estimatedEngineMemoryMb.toFixed(1)} MB
               </span>
@@ -597,9 +616,11 @@ export function TournamentLiveScreen({
             Tournament Concluded
           </p>
           <p className="text-xs text-emerald-100/90 mt-1">
-            {leader
-              ? `Winner: ${leader.label} (${leader.matchPoints.toFixed(1)} MP, ${leader.gamePoints.toFixed(1)} GP).`
-              : "Final standings are available."}{" "}
+            {firstPlaceRows.length === 1
+              ? `Winner: ${leader?.label ?? firstPlaceRows[0].label} (${firstPlaceRows[0].matchPoints.toFixed(1)} MP, ${firstPlaceRows[0].gamePoints.toFixed(1)} GP).`
+              : firstPlaceRows.length > 1
+                ? `Tie for 1st (${firstPlaceRows.length}-way): ${firstPlaceRows.map((row) => row.label).join(", ")}.`
+                : "Final standings are available."}{" "}
             Finished games: {overallFinished}/{state.matches.length}.
           </p>
         </div>
@@ -693,8 +714,8 @@ export function TournamentLiveScreen({
                 </button>
               )}
               <p className="text-xs text-gray-400">
-                Round progress {roundProgress} · Total finished {overallFinished}/
-                {state.matches.length}
+                Round progress {roundProgress} · Total finished{" "}
+                {overallFinished}/{state.matches.length}
                 {normalizedPlayerFilter
                   ? ` · Showing ${filteredRoundMatches.length}/${roundMatches.length}`
                   : ""}
@@ -948,6 +969,7 @@ export function TournamentLiveScreen({
           <StandingsTable
             seriesStandings={state.standings}
             gameStandings={gameModeStandings}
+            entrants={state.entrants}
           />
         </div>
       </div>
@@ -957,6 +979,7 @@ export function TournamentLiveScreen({
         gameStandings={gameModeStandings}
         matches={state.matches}
         series={state.series}
+        entrants={state.entrants}
       />
 
       <div

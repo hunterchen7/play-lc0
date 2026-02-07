@@ -122,10 +122,23 @@ function clampMaxSimultaneousGames(value: number): number {
 }
 
 function parseModelSizeMb(size: string): number {
-  const match = size.match(/([\d.]+)/);
+  const match = size.trim().match(/^([\d.]+)\s*(kb|mb|gb)?$/i);
   if (!match) return 0;
   const parsed = parseFloat(match[1]);
-  return Number.isFinite(parsed) ? parsed : 0;
+  if (!Number.isFinite(parsed)) return 0;
+
+  const unit = (match[2] ?? "mb").toLowerCase();
+  if (unit === "gb") return parsed * 1024;
+  if (unit === "kb") return parsed / 1024;
+  return parsed;
+}
+
+function getEntrantEstimatedRuntimeMb(entrant: TournamentEntrant): number {
+  const explicit = entrant.network.estimatedRuntimeMb;
+  if (typeof explicit === "number" && Number.isFinite(explicit) && explicit > 0) {
+    return explicit;
+  }
+  return parseModelSizeMb(entrant.network.size);
 }
 
 function computeMaxLoadedEnginesFromConcurrency(concurrency: number): number {
@@ -160,6 +173,21 @@ function makeInitialState(): TournamentRuntimeState {
     selectedMatchId: null,
     error: null,
   };
+}
+
+function recomputeStandingsForState(
+  state: TournamentRuntimeState,
+  byeMatchPoints?: Map<string, number>,
+  byeGamePoints?: Map<string, number>,
+): StandingRow[] {
+  const matchesById = new Map(state.matches.map((match) => [match.id, match]));
+  return calculateStandings({
+    entrants: state.entrants,
+    series: state.series,
+    matchesById,
+    byeMatchPoints,
+    byeGamePoints,
+  });
 }
 
 function sanitizeRestoredMatch(match: TournamentMatch): TournamentMatch {
@@ -233,13 +261,20 @@ function loadPersistedTournament(): LoadedPersistedTournament | null {
           ? "Reload detected. Click Resume Tournament to continue."
           : parsed.state.error,
     };
+    const restoredByeMatchPoints = new Map(parsed.byeMatchPoints ?? []);
+    const restoredByeGamePoints = new Map(parsed.byeGamePoints ?? []);
+    restoredState.standings = recomputeStandingsForState(
+      restoredState,
+      restoredByeMatchPoints,
+      restoredByeGamePoints,
+    );
 
     if (restoredState.entrants.length === 0) return null;
 
     return {
       state: restoredState,
-      byeMatchPoints: new Map(parsed.byeMatchPoints ?? []),
-      byeGamePoints: new Map(parsed.byeGamePoints ?? []),
+      byeMatchPoints: restoredByeMatchPoints,
+      byeGamePoints: restoredByeGamePoints,
       byeRecipients: new Set(parsed.byeRecipients ?? []),
       historyRecordId:
         typeof parsed.historyRecordId === "string"
@@ -650,7 +685,7 @@ export function useTournamentRunner() {
     const estimatedMemoryMb = loadedIds.reduce((sum, entrantId) => {
       const entrant = entrantsById.get(entrantId);
       if (!entrant) return sum;
-      return sum + parseModelSizeMb(entrant.network.size);
+      return sum + getEntrantEstimatedRuntimeMb(entrant);
     }, 0);
 
     setEngineStats({
@@ -1860,6 +1895,7 @@ export function useTournamentRunner() {
       }
 
       if (!isRunActive(runId)) return;
+      setStandingsFromCurrent(config.entrants);
 
       setRuntime((prev) => ({
         ...prev,
@@ -2269,14 +2305,26 @@ export function useTournamentRunner() {
       byeMatchPointsRef.current = new Map();
       byeGamePointsRef.current = new Map();
       byeRecipientsRef.current = new Set();
+      const normalizedRestored = {
+        ...restored,
+        standings:
+          restored.format === "round_robin"
+            ? recomputeStandingsForState(restored)
+            : restored.standings,
+      };
 
       setRuntime(() => ({
-        ...restored,
-        moveDelayMs: clampMoveDelayMs(restored.moveDelayMs),
-        tiebreakMode: normalizeTiebreakMode(restored.tiebreakMode),
-        maxTiebreakGames: clampMaxTiebreakGames(restored.maxTiebreakGames),
-        tiebreakWinBy: clampTiebreakWinBy(restored.tiebreakWinBy),
-        status: restored.status === "running" ? "paused" : restored.status,
+        ...normalizedRestored,
+        moveDelayMs: clampMoveDelayMs(normalizedRestored.moveDelayMs),
+        tiebreakMode: normalizeTiebreakMode(normalizedRestored.tiebreakMode),
+        maxTiebreakGames: clampMaxTiebreakGames(
+          normalizedRestored.maxTiebreakGames,
+        ),
+        tiebreakWinBy: clampTiebreakWinBy(normalizedRestored.tiebreakWinBy),
+        status:
+          normalizedRestored.status === "running"
+            ? "paused"
+            : normalizedRestored.status,
         selectedMatchId: null,
       }));
 

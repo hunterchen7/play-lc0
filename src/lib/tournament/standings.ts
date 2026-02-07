@@ -45,45 +45,52 @@ export function calculateStandings({
         (match): match is TournamentMatch =>
           !!match && match.status === "finished" && match.result !== "*",
       );
+    const regulationGames = games.filter(
+      (game) => game.seriesGameIndex <= group.plannedGames,
+    );
 
-    if (games.length === 0) continue;
+    if (regulationGames.length === 0) continue;
 
-    const whiteRow = rows.get(group.whiteEntrantId);
-    const blackRow = rows.get(group.blackEntrantId);
-    if (!whiteRow || !blackRow) continue;
+    const whiteSeriesRow = rows.get(group.whiteEntrantId);
+    const blackSeriesRow = rows.get(group.blackEntrantId);
+    if (!whiteSeriesRow || !blackSeriesRow) continue;
 
     opponents.get(group.whiteEntrantId)?.push(group.blackEntrantId);
     opponents.get(group.blackEntrantId)?.push(group.whiteEntrantId);
 
-    for (const game of games) {
+    for (const game of regulationGames) {
+      const whiteGameRow = rows.get(game.whiteEntrantId);
+      const blackGameRow = rows.get(game.blackEntrantId);
+      if (!whiteGameRow || !blackGameRow) continue;
+
       if (game.result === "1-0") {
-        whiteRow.gamePoints += 1;
+        whiteGameRow.gamePoints += 1;
       } else if (game.result === "0-1") {
-        blackRow.gamePoints += 1;
+        blackGameRow.gamePoints += 1;
       } else {
-        whiteRow.gamePoints += 0.5;
-        blackRow.gamePoints += 0.5;
+        whiteGameRow.gamePoints += 0.5;
+        blackGameRow.gamePoints += 0.5;
       }
     }
 
     if (group.status !== "finished") continue;
 
-    whiteRow.playedSeries += 1;
-    blackRow.playedSeries += 1;
+    whiteSeriesRow.playedSeries += 1;
+    blackSeriesRow.playedSeries += 1;
 
     if (group.winnerEntrantId === group.whiteEntrantId) {
-      whiteRow.matchPoints += 1;
-      whiteRow.wins += 1;
-      blackRow.losses += 1;
+      whiteSeriesRow.matchPoints += 1;
+      whiteSeriesRow.wins += 1;
+      blackSeriesRow.losses += 1;
     } else if (group.winnerEntrantId === group.blackEntrantId) {
-      blackRow.matchPoints += 1;
-      blackRow.wins += 1;
-      whiteRow.losses += 1;
+      blackSeriesRow.matchPoints += 1;
+      blackSeriesRow.wins += 1;
+      whiteSeriesRow.losses += 1;
     } else {
-      whiteRow.matchPoints += 0.5;
-      blackRow.matchPoints += 0.5;
-      whiteRow.draws += 1;
-      blackRow.draws += 1;
+      whiteSeriesRow.matchPoints += 0.5;
+      blackSeriesRow.matchPoints += 0.5;
+      whiteSeriesRow.draws += 1;
+      blackSeriesRow.draws += 1;
     }
   }
 

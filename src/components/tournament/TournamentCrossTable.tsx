@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type {
   StandingRow,
+  TournamentEntrant,
   TournamentMatch,
   TournamentSeries,
 } from "../../types/tournament";
@@ -12,6 +13,12 @@ interface CrossCell {
   pendingSeries: number;
   finishedGames: number;
   pendingGames: number;
+  rowAsWhiteWins: number;
+  rowAsWhiteDraws: number;
+  rowAsWhiteLosses: number;
+  rowAsBlackWins: number;
+  rowAsBlackDraws: number;
+  rowAsBlackLosses: number;
 }
 
 interface TournamentCrossTableProps {
@@ -19,10 +26,15 @@ interface TournamentCrossTableProps {
   gameStandings: StandingRow[];
   matches: TournamentMatch[];
   series: TournamentSeries[];
+  entrants: TournamentEntrant[];
 }
 
-type SortColumn = "default" | "name" | "matchPoints" | "gamePoints";
+type SortColumn = "default" | "name" | "elo" | "matchPoints" | "gamePoints";
 type SortDirection = "asc" | "desc";
+
+const RANK_COL_CLASS = "py-2 pr-2 w-12 whitespace-nowrap";
+const RATING_COL_CLASS = "py-2 pr-2 w-36 whitespace-nowrap";
+const ENTRANT_COL_CLASS = "py-2 pr-2 w-72";
 
 function formatPoints(points: number): string {
   return Number.isInteger(points) ? String(points) : points.toFixed(1);
@@ -37,17 +49,37 @@ function sortIndicator(
   return activeDirection === "asc" ? " ↑" : " ↓";
 }
 
+function parseEloBounds(elo: string): { low: number; high: number } {
+  const values = (elo.match(/\d+/g) ?? [])
+    .map((value) => parseInt(value, 10))
+    .filter((value) => Number.isFinite(value));
+
+  if (values.length === 0) return { low: 0, high: 0 };
+  if (values.length === 1) return { low: values[0], high: values[0] };
+  const first = values[0];
+  const second = values[1];
+  return {
+    low: Math.min(first, second),
+    high: Math.max(first, second),
+  };
+}
+
 export function TournamentCrossTable({
   seriesStandings,
   gameStandings,
   matches,
   series,
+  entrants,
 }: TournamentCrossTableProps) {
   const [sortColumn, setSortColumn] = useState<SortColumn>("default");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const gamePointsByEntrant = useMemo(
     () => new Map(gameStandings.map((row) => [row.entrantId, row.gamePoints])),
     [gameStandings],
+  );
+  const eloByEntrant = useMemo(
+    () => new Map(entrants.map((entrant) => [entrant.id, entrant.network.elo])),
+    [entrants],
   );
 
   const ordered = useMemo<StandingRow[]>(() => {
@@ -57,6 +89,14 @@ export function TournamentCrossTable({
       let cmp = 0;
       if (sortColumn === "name") {
         cmp = a.label.localeCompare(b.label);
+      } else if (sortColumn === "elo") {
+        const aElo = parseEloBounds(eloByEntrant.get(a.entrantId) ?? "");
+        const bElo = parseEloBounds(eloByEntrant.get(b.entrantId) ?? "");
+        if (aElo.low !== bElo.low) {
+          cmp = aElo.low - bElo.low;
+        } else {
+          cmp = aElo.high - bElo.high;
+        }
       } else if (sortColumn === "matchPoints") {
         cmp = a.matchPoints - b.matchPoints;
         if (cmp === 0) {
@@ -79,7 +119,7 @@ export function TournamentCrossTable({
       }
       return sortDirection === "asc" ? cmp : -cmp;
     });
-  }, [gamePointsByEntrant, seriesStandings, sortColumn, sortDirection]);
+  }, [eloByEntrant, gamePointsByEntrant, seriesStandings, sortColumn, sortDirection]);
 
   const toggleSort = (column: SortColumn) => {
     if (column === "default") {
@@ -117,6 +157,12 @@ export function TournamentCrossTable({
           pendingSeries: 0,
           finishedGames: 0,
           pendingGames: 0,
+          rowAsWhiteWins: 0,
+          rowAsWhiteDraws: 0,
+          rowAsWhiteLosses: 0,
+          rowAsBlackWins: 0,
+          rowAsBlackDraws: 0,
+          rowAsBlackLosses: 0,
         };
         rowMap.set(colId, cell);
       }
@@ -172,10 +218,24 @@ export function TournamentCrossTable({
       const whiteCell = getCell(match.whiteEntrantId, match.blackEntrantId);
       whiteCell.gamePoints += whitePoints;
       whiteCell.finishedGames += 1;
+      if (match.result === "1-0") {
+        whiteCell.rowAsWhiteWins += 1;
+      } else if (match.result === "0-1") {
+        whiteCell.rowAsWhiteLosses += 1;
+      } else {
+        whiteCell.rowAsWhiteDraws += 1;
+      }
 
       const blackCell = getCell(match.blackEntrantId, match.whiteEntrantId);
       blackCell.gamePoints += blackPoints;
       blackCell.finishedGames += 1;
+      if (match.result === "0-1") {
+        blackCell.rowAsBlackWins += 1;
+      } else if (match.result === "1-0") {
+        blackCell.rowAsBlackLosses += 1;
+      } else {
+        blackCell.rowAsBlackDraws += 1;
+      }
     }
 
     return byRow;
@@ -197,7 +257,7 @@ export function TournamentCrossTable({
         <table className="w-full text-xs text-left">
           <thead className="text-gray-400 border-b border-slate-700">
             <tr>
-              <th className="py-2 pr-2">
+              <th className={RANK_COL_CLASS}>
                 <button
                   type="button"
                   onClick={() => toggleSort("default")}
@@ -207,7 +267,17 @@ export function TournamentCrossTable({
                   #{sortIndicator(sortColumn, sortDirection, "default")}
                 </button>
               </th>
-              <th className="py-2 pr-2">
+              <th className={RATING_COL_CLASS}>
+                <button
+                  type="button"
+                  onClick={() => toggleSort("elo")}
+                  className="hover:text-gray-200 transition-colors"
+                  title="Sort by rating"
+                >
+                  Rating{sortIndicator(sortColumn, sortDirection, "elo")}
+                </button>
+              </th>
+              <th className={ENTRANT_COL_CLASS}>
                 <button
                   type="button"
                   onClick={() => toggleSort("name")}
@@ -254,8 +324,15 @@ export function TournamentCrossTable({
                   row.entrantId === leaderEntrantId ? "text-emerald-300" : "text-gray-200"
                 }`}
               >
-                <td className="py-2 pr-2">{rowIndex + 1}</td>
-                <td className="py-2 pr-2 truncate max-w-44">{row.label}</td>
+                <td className={RANK_COL_CLASS}>{rowIndex + 1}</td>
+                <td
+                  className={`${RATING_COL_CLASS} text-gray-300 text-[11px]`}
+                >
+                  {eloByEntrant.get(row.entrantId) ?? "N/A"}
+                </td>
+                <td className={`${ENTRANT_COL_CLASS} truncate max-w-72`}>
+                  {row.label}
+                </td>
                 {ordered.map((col) => {
                   if (col.entrantId === row.entrantId) {
                     return (
@@ -306,7 +383,10 @@ export function TournamentCrossTable({
                     <td
                       key={`${row.entrantId}-${col.entrantId}`}
                       className="py-1 px-1 text-center leading-tight"
-                      title={`Series ${formatPoints(cell.seriesPoints)} (finished ${cell.finishedSeries}, pending ${cell.pendingSeries}) · Games ${formatPoints(cell.gamePoints)} (finished ${cell.finishedGames}, pending ${cell.pendingGames})`}
+                      title={`${row.label} as White W-D-L: ${cell.rowAsWhiteWins}-${cell.rowAsWhiteDraws}-${cell.rowAsWhiteLosses}
+${row.label} as Black W-D-L: ${cell.rowAsBlackWins}-${cell.rowAsBlackDraws}-${cell.rowAsBlackLosses}
+${col.label} as White W-D-L: ${cell.rowAsBlackLosses}-${cell.rowAsBlackDraws}-${cell.rowAsBlackWins}
+${col.label} as Black W-D-L: ${cell.rowAsWhiteLosses}-${cell.rowAsWhiteDraws}-${cell.rowAsWhiteWins}`}
                     >
                       <div className="text-xs font-medium text-gray-100">
                         {formatPoints(cell.seriesPoints)}

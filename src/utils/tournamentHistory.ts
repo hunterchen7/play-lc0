@@ -1,5 +1,7 @@
 import type { TournamentRuntimeState } from "../types/tournament";
 import { buildTournamentPgn } from "../lib/tournament/pgn";
+import type { StandingRow } from "../types/tournament";
+import { calculateStandings } from "../lib/tournament/standings";
 
 const DB_NAME = "play-lc0-tournaments";
 const DB_VERSION = 1;
@@ -32,6 +34,11 @@ interface TournamentHistoryRecord {
 
 interface SaveTournamentHistoryOptions {
   id?: string;
+}
+
+interface PlacementEntry {
+  rank: number;
+  row: StandingRow;
 }
 
 function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
@@ -107,10 +114,66 @@ function tournamentFingerprint(state: TournamentRuntimeState): string {
   return `t-${simpleHash(key)}`;
 }
 
+function standingTieKey(row: StandingRow): string {
+  return [
+    row.matchPoints.toFixed(4),
+    row.gamePoints.toFixed(4),
+    row.buchholz.toFixed(4),
+    row.wins,
+  ].join("|");
+}
+
+function buildPlacementEntries(standings: StandingRow[]): PlacementEntry[] {
+  const entries: PlacementEntry[] = [];
+  let previousKey: string | null = null;
+  let currentRank = 0;
+
+  for (const row of standings) {
+    const key = standingTieKey(row);
+    if (key !== previousKey) {
+      currentRank += 1;
+      previousKey = key;
+    }
+    entries.push({ rank: currentRank, row });
+  }
+
+  return entries;
+}
+
+function buildTopPlacings(standings: StandingRow[]): string[] {
+  const placements = buildPlacementEntries(standings);
+  const top = placements.filter((entry) => entry.rank <= 3);
+  return top.map(
+    ({ rank, row }) =>
+      `${rank}. ${row.label} (${row.matchPoints.toFixed(1)} MP, ${row.gamePoints.toFixed(1)} GP)`,
+  );
+}
+
+function buildWinnerLabel(standings: StandingRow[]): string | null {
+  const placements = buildPlacementEntries(standings);
+  const firstPlace = placements.filter((entry) => entry.rank === 1);
+  if (firstPlace.length === 0) return null;
+  if (firstPlace.length === 1) return firstPlace[0].row.label;
+  return `Tie for 1st (${firstPlace.length}-way)`;
+}
+
+function getHistoryStandings(state: TournamentRuntimeState): StandingRow[] {
+  if (state.format !== "round_robin") {
+    return state.standings;
+  }
+  const matchesById = new Map(state.matches.map((match) => [match.id, match]));
+  return calculateStandings({
+    entrants: state.entrants,
+    series: state.series,
+    matchesById,
+  });
+}
+
 function buildSummary(
   state: TournamentRuntimeState,
   forcedId?: string,
 ): TournamentHistorySummary {
+  const standings = getHistoryStandings(state);
   const finishedGames = state.matches.filter(
     (match) => match.status === "finished" || match.status === "cancelled",
   ).length;
@@ -140,13 +203,8 @@ function buildSummary(
     maxSimultaneousGames: state.maxSimultaneousGames,
     totalGames: state.matches.length,
     finishedGames,
-    winnerLabel: state.standings[0]?.label ?? null,
-    topPlacings: state.standings
-      .slice(0, 3)
-      .map(
-        (row, idx) =>
-          `${idx + 1}. ${row.label} (${row.matchPoints.toFixed(1)} MP, ${row.gamePoints.toFixed(1)} GP)`,
-      ),
+    winnerLabel: buildWinnerLabel(standings),
+    topPlacings: buildTopPlacings(standings),
   };
 }
 
@@ -154,6 +212,7 @@ function normalizeSummary(
   summary: TournamentHistorySummary,
   state: TournamentRuntimeState,
 ): TournamentHistorySummary {
+  const standings = getHistoryStandings(state);
   const status = summary.status ?? state.status ?? "completed";
   const isOngoing =
     typeof summary.isOngoing === "boolean"
@@ -180,15 +239,8 @@ function normalizeSummary(
       state.matches.filter(
         (match) => match.status === "finished" || match.status === "cancelled",
       ).length,
-    winnerLabel: summary.winnerLabel ?? state.standings[0]?.label ?? null,
-    topPlacings:
-      summary.topPlacings ??
-      state.standings
-        .slice(0, 3)
-        .map(
-          (row, idx) =>
-            `${idx + 1}. ${row.label} (${row.matchPoints.toFixed(1)} MP, ${row.gamePoints.toFixed(1)} GP)`,
-        ),
+    winnerLabel: buildWinnerLabel(standings),
+    topPlacings: buildTopPlacings(standings),
   };
 }
 
