@@ -10,6 +10,7 @@ export interface NetworkInfo {
   description: string;
   source: string;
   url?: string; // Optional: external URL for downloading the model
+  isCustom?: boolean; // True for user-uploaded custom models
 }
 
 export const NETWORKS: NetworkInfo[] = [

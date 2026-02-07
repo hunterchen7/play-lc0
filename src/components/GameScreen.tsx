@@ -9,6 +9,7 @@ import { MoveHistory } from "./MoveHistory";
 import { Lc0Engine } from "../engine/workerInterface";
 import { moveToUCI, uciToChessJsMove } from "../utils/chess";
 import { saveGame } from "../utils/savedGames";
+import { getModelUrl } from "../config";
 import type { EngineState } from "../types";
 import type { GameConfig } from "../types/game";
 
@@ -188,7 +189,7 @@ export function GameScreen({
       setEngineState((prev) => ({ ...prev, ...partial }));
     });
 
-    engine.init(`/models/${config.network.file}`);
+    engine.init(getModelUrl(config.network.file));
 
     return () => {
       unsub();

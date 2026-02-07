@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Download, Check, Trash2, Loader2, ExternalLink } from "lucide-react";
+import { Download, Check, Trash2, Loader2, ExternalLink, Plus } from "lucide-react";
 import { NETWORKS, type NetworkInfo } from "../constants/networks";
 import type { SavedGame } from "../types/game";
 import {
@@ -9,6 +9,8 @@ import {
   decompressGzip,
 } from "../engine/modelCache";
 import { getModelUrl } from "../config";
+import { useNetworks } from "../hooks/useNetworks";
+import { AddCustomModelModal } from "./AddCustomModelModal";
 
 type SortColumn = "elo" | "size";
 type SortDirection = "asc" | "desc";
@@ -59,6 +61,9 @@ function modelUrl(file: string) {
 }
 
 export function NetworkPicker({ onStart }: NetworkPickerProps) {
+  const { networks, addCustomModel, removeCustomModel } = useNetworks();
+  const [showCustomModal, setShowCustomModal] = useState(false);
+
   const [selected, setSelected] = useState<NetworkInfo>(() => {
     const savedId = localStorage.getItem(LAST_SELECTED_NETWORK_KEY);
     if (!savedId) return NETWORKS[0];
@@ -85,6 +90,7 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
   });
 
   const [cachedModels, setCachedModels] = useState<Set<string>>(new Set());
+  const [cacheLoading, setCacheLoading] = useState(true);
   const [downloading, setDownloading] = useState<Map<string, number>>(
     new Map(),
   );
@@ -94,6 +100,20 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
   const [downloadConfirm, setDownloadConfirm] = useState<NetworkInfo | null>(
     null,
   );
+
+  // Re-resolve selected network when custom models finish loading.
+  // Only depends on `networks` — NOT `selected.id` — to avoid fighting
+  // with the user's click (the localStorage write hasn't happened yet when
+  // this runs, so reading it back would revert the selection).
+  useEffect(() => {
+    const savedId = localStorage.getItem(LAST_SELECTED_NETWORK_KEY);
+    if (!savedId) return;
+    setSelected((prev) => {
+      if (prev.id === savedId) return prev;
+      const found = networks.find((net) => net.id === savedId);
+      return found ?? prev;
+    });
+  }, [networks]);
 
   useEffect(() => {
     localStorage.setItem("lc0-sort-column", sortColumn);
@@ -109,7 +129,9 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
     localStorage.setItem(LAST_TEMPERATURE_KEY, temperature.toString());
   }, [temperature]);
 
+  // Check cache status for built-in networks once on mount
   useEffect(() => {
+    let cancelled = false;
     async function checkCache() {
       const cached = new Set<string>();
       for (const net of NETWORKS) {
@@ -117,13 +139,33 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
           cached.add(net.id);
         }
       }
-      setCachedModels(cached);
+      if (!cancelled) {
+        setCachedModels((prev) => {
+          const next = new Set(prev);
+          for (const id of cached) next.add(id);
+          return next;
+        });
+        setCacheLoading(false);
+      }
     }
     checkCache();
+    return () => { cancelled = true; };
   }, []);
 
+  // Custom models are always cached (uploaded locally) — merge their IDs
+  // synchronously whenever the network list changes so there's no async gap.
+  useEffect(() => {
+    const customIds = networks.filter((n) => n.isCustom).map((n) => n.id);
+    if (customIds.length === 0) return;
+    setCachedModels((prev) => {
+      const next = new Set(prev);
+      for (const id of customIds) next.add(id);
+      return next;
+    });
+  }, [networks]);
+
   const sortedNetworks = useMemo(() => {
-    const filtered = NETWORKS.filter((net) => {
+    const filtered = networks.filter((net) => {
       if (!searchTerm) return true;
       const term = searchTerm.toLowerCase();
       return (
@@ -142,15 +184,15 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
       return sortDirection === "asc" ? val : -val;
     });
     return sorted;
-  }, [sortColumn, sortDirection, searchTerm]);
+  }, [networks, sortColumn, sortDirection, searchTerm]);
 
   const totalCachedSize = useMemo(() => {
     let total = 0;
-    for (const net of NETWORKS) {
+    for (const net of networks) {
       if (cachedModels.has(net.id)) total += parseSizeMB(net.size);
     }
     return total;
-  }, [cachedModels]);
+  }, [networks, cachedModels]);
 
   const selectedIsCached = cachedModels.has(selected.id);
 
@@ -222,24 +264,32 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
   }, []);
 
   const handleDelete = useCallback(async (net: NetworkInfo) => {
-    await deleteCachedModel(modelUrl(net.file));
+    if (net.isCustom) {
+      await removeCustomModel(net.id);
+    } else {
+      await deleteCachedModel(modelUrl(net.file));
+    }
     setCachedModels((prev) => {
       const next = new Set(prev);
       next.delete(net.id);
       return next;
     });
     setDeleteConfirm(null);
-  }, []);
+  }, [removeCustomModel]);
 
   const handleDeleteAll = useCallback(async () => {
-    for (const net of NETWORKS) {
+    for (const net of networks) {
       if (cachedModels.has(net.id)) {
-        await deleteCachedModel(modelUrl(net.file));
+        if (net.isCustom) {
+          await removeCustomModel(net.id);
+        } else {
+          await deleteCachedModel(modelUrl(net.file));
+        }
       }
     }
     setCachedModels(new Set());
     setDeleteConfirm(null);
-  }, [cachedModels]);
+  }, [networks, cachedModels, removeCustomModel]);
 
   const handleStart = () => {
     if (!selectedIsCached) return;
@@ -256,13 +306,23 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
             Choose your opponent
           </h2>
 
-          <input
-            type="text"
-            placeholder="Search networks..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full px-3 py-2 mb-3 bg-slate-800 border border-slate-700 rounded-lg text-gray-200 placeholder-gray-500 focus:outline-none focus:border-emerald-500 transition-colors text-sm"
-          />
+          <div className="flex gap-2 mb-3">
+            <input
+              type="text"
+              placeholder="Search networks..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-gray-200 placeholder-gray-500 focus:outline-none focus:border-emerald-500 transition-colors text-sm"
+            />
+            <button
+              onClick={() => setShowCustomModal(true)}
+              className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-gray-300 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 shrink-0"
+              title="Add custom ONNX model"
+            >
+              <Plus size={16} />
+              Custom
+            </button>
+          </div>
 
           <div className="flex items-center justify-between mb-3">
             <div className="text-xs text-gray-500">
@@ -326,6 +386,12 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
                           <span className="font-semibold text-gray-100">
                             {net.name}
                           </span>
+                          {net.isCustom && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-purple-600/40 text-purple-300 rounded">
+                              Custom
+                            </span>
+                          )}
+                          {net.source && (
                           <a
                             href={net.source}
                             target="_blank"
@@ -336,6 +402,7 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
                           >
                             <ExternalLink size={13} />
                           </a>
+                          )}
                         </div>
                         <div className="flex items-baseline gap-3">
                           <span className="text-xs text-gray-400">
@@ -387,6 +454,10 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
                             <Trash2 size={18} />
                           </button>
                         </>
+                      ) : cacheLoading ? (
+                        <div className="p-1.5 text-gray-600" title="Checking cache...">
+                          <Loader2 size={18} className="animate-spin" />
+                        </div>
                       ) : (
                         <button
                           onClick={(e) => {
@@ -486,12 +557,14 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
 
         <button
           onClick={handleStart}
-          disabled={!selectedIsCached}
+          disabled={!selectedIsCached || cacheLoading}
           className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-700 disabled:text-gray-500 text-white text-xl font-semibold rounded-xl transition-colors"
         >
-          {selectedIsCached
-            ? `Play vs ${selected.name}`
-            : `${selected.name} not downloaded`}
+          {cacheLoading
+            ? "Checking cached models..."
+            : selectedIsCached
+              ? `Play vs ${selected.name}`
+              : `${selected.name} not downloaded`}
         </button>
       </div>
 
@@ -523,6 +596,16 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
                 </span>{" "}
                 ({totalCachedSize.toFixed(1)} MB) from cache? You can
                 re-download them later.
+              </>
+            ) : deleteConfirm?.isCustom ? (
+              <>
+                Remove{" "}
+                <span className="text-gray-200 font-medium">
+                  {deleteConfirm.name}
+                </span>{" "}
+                ({deleteConfirm.size})? This model was manually uploaded and{" "}
+                <span className="text-red-300 font-medium">cannot be re-downloaded</span>.
+                You will need to add it again manually.
               </>
             ) : deleteConfirm ? (
               <>
@@ -606,6 +689,15 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
           </div>
         </div>
       </div>
+
+      <AddCustomModelModal
+        open={showCustomModal}
+        onClose={() => setShowCustomModal(false)}
+        onAdd={async (meta, data) => {
+          await addCustomModel(meta, data);
+          setCachedModels((prev) => new Set(prev).add(meta.id));
+        }}
+      />
     </>
   );
 }

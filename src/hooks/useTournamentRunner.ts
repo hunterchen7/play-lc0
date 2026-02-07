@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chess } from "chess.js";
 import { Lc0Engine } from "../engine/workerInterface";
+import { getModelUrl } from "../config";
 import { moveToUCI, uciToChessJsMove } from "../utils/chess";
 import {
   calculateStandings,
@@ -930,7 +931,7 @@ export function useTournamentRunner() {
           }
         });
 
-        engine.init(`/models/${entrant.network.file}`);
+        engine.init(getModelUrl(entrant.network.file));
       })
         .then((engine) => {
           engineMapRef.current.set(entrant.id, engine);
