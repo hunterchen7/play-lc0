@@ -6,6 +6,8 @@ import {
   hasModelCached,
 } from "../../engine/modelCache";
 import { getModelUrl } from "../../config";
+import { useNetworks } from "../../hooks/useNetworks";
+import { AddCustomModelModal } from "../AddCustomModelModal";
 import {
   getTournamentHistoryById,
   type TournamentHistorySummary,
@@ -249,6 +251,9 @@ export function TournamentSetupScreen({
   onOpenSavedTournament,
   onBack,
 }: TournamentSetupScreenProps) {
+  const { networks, addCustomModel } = useNetworks();
+  const [showCustomModal, setShowCustomModal] = useState(false);
+
   const persistedSetup = useMemo(() => loadPersistedSetupDraft(), []);
   const [format, setFormat] = useState<TournamentFormat>(
     persistedSetup?.format ?? "round_robin",
@@ -283,10 +288,12 @@ export function TournamentSetupScreen({
   const [selectedNetworkIds, setSelectedNetworkIds] = useState<Set<string>>(
     new Set(),
   );
+  const [entrantSearch, setEntrantSearch] = useState("");
   const [attemptedStart, setAttemptedStart] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [cachedModels, setCachedModels] = useState<Set<string>>(new Set());
+  const [cacheLoading, setCacheLoading] = useState(true);
   const [downloading, setDownloading] = useState<Map<string, number>>(
     new Map(),
   );
@@ -301,10 +308,11 @@ export function TournamentSetupScreen({
   );
 
   const networkById = useMemo(
-    () => new Map(NETWORKS.map((network) => [network.id, network])),
-    [],
+    () => new Map(networks.map((network) => [network.id, network])),
+    [networks],
   );
 
+  // Check cache status for built-in networks once on mount
   useEffect(() => {
     let cancelled = false;
 
@@ -316,7 +324,12 @@ export function TournamentSetupScreen({
         }
       }
       if (!cancelled) {
-        setCachedModels(cached);
+        setCachedModels((prev) => {
+          const next = new Set(prev);
+          for (const id of cached) next.add(id);
+          return next;
+        });
+        setCacheLoading(false);
       }
     }
 
@@ -325,6 +338,17 @@ export function TournamentSetupScreen({
       cancelled = true;
     };
   }, []);
+
+  // Custom models are always cached — merge their IDs synchronously
+  useEffect(() => {
+    const customIds = networks.filter((n) => n.isCustom).map((n) => n.id);
+    if (customIds.length === 0) return;
+    setCachedModels((prev) => {
+      const next = new Set(prev);
+      for (const id of customIds) next.add(id);
+      return next;
+    });
+  }, [networks]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -440,9 +464,24 @@ export function TournamentSetupScreen({
   );
 
   const archOptions = useMemo(() => {
-    const unique = Array.from(new Set(NETWORKS.map((network) => network.arch)));
+    const unique = Array.from(new Set(networks.map((network) => network.arch)));
     return ["all", ...unique.sort((a, b) => a.localeCompare(b))];
-  }, []);
+  }, [networks]);
+
+  const filteredEntrants = useMemo(() => {
+    const term = entrantSearch.trim().toLowerCase();
+    if (!term) return entrants;
+    return entrants.filter((entrant) => {
+      const network = networkById.get(entrant.networkId);
+      if (!network) return false;
+      return (
+        network.name.toLowerCase().includes(term) ||
+        network.arch.toLowerCase().includes(term) ||
+        network.elo.toLowerCase().includes(term) ||
+        entrant.customLabel.toLowerCase().includes(term)
+      );
+    });
+  }, [entrants, entrantSearch, networkById]);
 
   const entrantKeySet = useMemo(() => {
     return new Set(
@@ -469,7 +508,7 @@ export function TournamentSetupScreen({
   const modalNetworks = useMemo(() => {
     const term = modalSearch.trim().toLowerCase();
 
-    const filtered = NETWORKS.filter((network) => {
+    const filtered = networks.filter((network) => {
       if (modalArchFilter !== "all" && network.arch !== modalArchFilter) {
         return false;
       }
@@ -499,25 +538,25 @@ export function TournamentSetupScreen({
     });
 
     return sorted;
-  }, [modalArchFilter, modalSearch, modalSortColumn, modalSortDirection]);
+  }, [networks, modalArchFilter, modalSearch, modalSortColumn, modalSortDirection]);
 
   const duplicateBlockedNetworkIds = useMemo(() => {
     const keyTemp = addTemperature.toFixed(2);
     return new Set(
-      NETWORKS.filter((network) =>
+      networks.filter((network) =>
         entrantKeySet.has(`${network.id}:${keyTemp}`),
       ).map((network) => network.id),
     );
-  }, [addTemperature, entrantKeySet]);
+  }, [networks, addTemperature, entrantKeySet]);
 
   const uncachedNetworkIds = useMemo(
     () =>
       new Set(
-        NETWORKS.filter((network) => !cachedModels.has(network.id)).map(
+        networks.filter((network) => !cachedModels.has(network.id)).map(
           (network) => network.id,
         ),
       ),
-    [cachedModels],
+    [networks, cachedModels],
   );
 
   const blockedNetworkIds = useMemo(
@@ -549,7 +588,9 @@ export function TournamentSetupScreen({
       (entrant) => !cachedModels.has(entrant.networkId),
     );
     if (hasUncachedEntrant) {
-      return "Download all entrant engines before starting the tournament.";
+      return cacheLoading
+        ? "Still checking which models are cached..."
+        : "Download all entrant engines before starting the tournament.";
     }
 
     if (duplicateKeys.size > 0) {
@@ -561,7 +602,7 @@ export function TournamentSetupScreen({
     }
 
     return null;
-  }, [cachedModels, duplicateKeys, entrants, format, networkById, swissRounds]);
+  }, [cacheLoading, cachedModels, duplicateKeys, entrants, format, networkById, swissRounds]);
 
   const estimatedSeries = useMemo(() => {
     const n = entrants.length;
@@ -838,8 +879,17 @@ export function TournamentSetupScreen({
                 or more networks.
               </div>
             ) : (
+              <>
+              {entrants.length > 4 && (
+                <input
+                  value={entrantSearch}
+                  onChange={(e) => setEntrantSearch(e.target.value)}
+                  placeholder="Filter entrants..."
+                  className="mb-3 w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-emerald-500 transition-colors"
+                />
+              )}
               <div className="flex flex-col gap-3 max-h-[50vh] overflow-y-scroll always-scrollbar pr-3">
-                {entrants.map((entrant, index) => {
+                {filteredEntrants.map((entrant, index) => {
                   const key = `${entrant.networkId}:${entrant.temperature.toFixed(2)}`;
                   const duplicate = duplicateKeys.has(key);
                   const network = networkById.get(entrant.networkId) ?? null;
@@ -868,12 +918,14 @@ export function TournamentSetupScreen({
                             className={`text-[10px] px-2 py-1 rounded ${
                               isCached
                                 ? "bg-emerald-900/40 text-emerald-300"
-                                : "bg-amber-900/40 text-amber-300"
+                                : cacheLoading
+                                  ? "bg-slate-700/40 text-gray-400"
+                                  : "bg-amber-900/40 text-amber-300"
                             }`}
                           >
-                            {isCached ? "downloaded" : "not downloaded"}
+                            {isCached ? "downloaded" : cacheLoading ? "checking..." : "not downloaded"}
                           </span>
-                          {!isCached && network && (
+                          {!isCached && !cacheLoading && network && (
                             <button
                               onClick={() => requestDownload(network)}
                               disabled={isDownloading}
@@ -905,9 +957,9 @@ export function TournamentSetupScreen({
                             }
                             className="px-2 py-2 bg-slate-900 border border-slate-700 rounded-md text-sm"
                           >
-                            {NETWORKS.map((network) => (
+                            {networks.map((network) => (
                               <option key={network.id} value={network.id}>
-                                {network.name}
+                                {network.name}{network.isCustom ? " (Custom)" : ""}
                               </option>
                             ))}
                           </select>
@@ -959,7 +1011,7 @@ export function TournamentSetupScreen({
                           temperature or network.
                         </p>
                       )}
-                      {!isCached && (
+                      {!isCached && !cacheLoading && (
                         <p className="mt-2 text-xs text-amber-300">
                           Download this engine before starting.
                         </p>
@@ -968,6 +1020,7 @@ export function TournamentSetupScreen({
                   );
                 })}
               </div>
+              </>
             )}
           </section>
 
@@ -1275,12 +1328,20 @@ export function TournamentSetupScreen({
                   temperature.
                 </p>
               </div>
-              <button
-                onClick={closeAddModal}
-                className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm"
-              >
-                Close
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowCustomModal(true)}
+                  className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm"
+                >
+                  + Custom Model
+                </button>
+                <button
+                  onClick={closeAddModal}
+                  className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm"
+                >
+                  Close
+                </button>
+              </div>
             </div>
 
             <div className="grid md:grid-cols-3 gap-2">
@@ -1394,8 +1455,10 @@ export function TournamentSetupScreen({
                       className={`text-left p-3 rounded-lg border transition-colors ${
                         duplicateBlocked
                           ? "border-slate-800 bg-slate-900/60 text-gray-600 cursor-not-allowed"
-                          : !isCached
+                          : !isCached && !cacheLoading
                             ? "border-amber-700/60 bg-amber-900/10"
+                            : !isCached && cacheLoading
+                              ? "border-slate-700 bg-slate-900/60"
                             : selected
                               ? "border-emerald-500 bg-emerald-900/20"
                               : "border-slate-700 bg-slate-900 hover:border-slate-500"
@@ -1405,6 +1468,11 @@ export function TournamentSetupScreen({
                         <div className="min-w-0">
                           <p className="text-sm text-gray-100 truncate">
                             {network.name}
+                            {network.isCustom && (
+                              <span className="ml-1.5 px-1.5 py-0.5 text-[10px] font-semibold bg-purple-600/40 text-purple-300 rounded align-middle">
+                                Custom
+                              </span>
+                            )}
                           </p>
                           <p className="text-xs text-gray-400 truncate">
                             {network.arch} · {network.elo} · {network.size}
@@ -1417,6 +1485,10 @@ export function TournamentSetupScreen({
                           {duplicateBlocked ? (
                             <span className="text-[10px] px-2 py-1 rounded bg-slate-800 text-gray-500">
                               already added @ {addTemperature.toFixed(2)}
+                            </span>
+                          ) : !isCached && cacheLoading ? (
+                            <span className="text-[10px] px-2 py-1 rounded bg-slate-800 text-gray-500">
+                              checking...
                             </span>
                           ) : !isCached ? (
                             <button
@@ -1442,7 +1514,7 @@ export function TournamentSetupScreen({
                           )}
                         </div>
                       </div>
-                      {!isCached && (
+                      {!isCached && !cacheLoading && (
                         <p className="text-[11px] text-amber-300 mt-2">
                           Must be downloaded before it can be added.
                         </p>
@@ -1523,6 +1595,15 @@ export function TournamentSetupScreen({
           </div>
         </div>
       </div>
+
+      <AddCustomModelModal
+        open={showCustomModal}
+        onClose={() => setShowCustomModal(false)}
+        onAdd={async (meta, data) => {
+          await addCustomModel(meta, data);
+          setCachedModels((prev) => new Set(prev).add(meta.id));
+        }}
+      />
     </>
   );
 }
