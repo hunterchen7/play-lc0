@@ -246,6 +246,7 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
       const modelData = await decompressGzip(compressed);
       await cacheModel(cacheKey, modelData);
       setCachedModels((prev) => new Set(prev).add(net.id));
+      setSelected(net);
     } catch (e) {
       console.error("Download failed:", e);
     } finally {
