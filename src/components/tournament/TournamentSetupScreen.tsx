@@ -434,6 +434,7 @@ export function TournamentSetupScreen({
 
         await cacheModel(cacheKey, modelData);
         setCachedModels((prev) => new Set(prev).add(network.id));
+        setSelectedNetworkIds((prev) => new Set(prev).add(network.id));
       } catch (error) {
         console.error("Tournament model download failed:", error);
       } finally {

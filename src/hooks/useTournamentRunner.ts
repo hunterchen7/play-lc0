@@ -851,7 +851,17 @@ export function useTournamentRunner() {
     }
   }, [refreshTournamentHistory]);
 
+  // Archive tournament snapshots: once on completion, on interval while active.
+  // Merged into a single effect to avoid races between separate effects.
   useEffect(() => {
+    if (state.status === "idle") return;
+    if (typeof window === "undefined") return;
+
+    if (state.status === "completed") {
+      void archiveTournamentSnapshot();
+      return;
+    }
+
     if (
       state.status !== "running" &&
       state.status !== "paused" &&
@@ -859,7 +869,6 @@ export function useTournamentRunner() {
     ) {
       return;
     }
-    if (typeof window === "undefined") return;
 
     void archiveTournamentSnapshot();
     const interval = window.setInterval(() => {
@@ -869,11 +878,6 @@ export function useTournamentRunner() {
     return () => {
       window.clearInterval(interval);
     };
-  }, [archiveTournamentSnapshot, state.status]);
-
-  useEffect(() => {
-    if (state.status !== "completed") return;
-    void archiveTournamentSnapshot();
   }, [archiveTournamentSnapshot, state.status]);
 
   useEffect(() => {
@@ -2194,21 +2198,30 @@ export function useTournamentRunner() {
     void resumeTournament();
   }, [resumeTournament]);
 
+  // Stable boolean selectors — avoid depending on entire matches/series arrays
+  // in effects, which would restart timers on every state update.
+  const canAdvanceRound = useMemo(() => {
+    if (state.status !== "running") return false;
+    if (state.currentRound <= 0 || state.currentRound >= state.totalRounds) return false;
+    if (hasPlayableOrRetryableMatches(state)) return false;
+    if (state.series.some((s) => s.round === state.currentRound && s.status !== "finished")) return false;
+    if (state.series.some((s) => s.round === state.currentRound + 1)) return false;
+    return true;
+  }, [state.status, state.currentRound, state.totalRounds, state.matches, state.series]);
+
+  const isTournamentComplete = useMemo(() => {
+    if (state.status !== "running") return false;
+    if (state.totalRounds <= 0 || state.currentRound < state.totalRounds) return false;
+    if (state.series.length === 0) return false;
+    if (state.matches.some((m) => m.status === "waiting" || m.status === "running")) return false;
+    if (state.matches.some((m) => m.status === "error" && (m.retryCount ?? 0) < MAX_MATCH_ERROR_RETRIES)) return false;
+    if (state.series.some((s) => s.status !== "finished")) return false;
+    return true;
+  }, [state.status, state.totalRounds, state.currentRound, state.matches, state.series]);
+
   useEffect(() => {
+    if (!canAdvanceRound) return;
     if (typeof window === "undefined") return;
-    if (state.status !== "running") return;
-    if (state.currentRound <= 0 || state.currentRound >= state.totalRounds) return;
-    if (hasPlayableOrRetryableMatches(state)) return;
-
-    const currentRoundHasUnfinishedSeries = state.series.some(
-      (series) => series.round === state.currentRound && series.status !== "finished",
-    );
-    if (currentRoundHasUnfinishedSeries) return;
-
-    const nextRoundAlreadyCreated = state.series.some(
-      (series) => series.round === state.currentRound + 1,
-    );
-    if (nextRoundAlreadyCreated) return;
 
     const timer = window.setTimeout(() => {
       void resumeTournament();
@@ -2217,49 +2230,17 @@ export function useTournamentRunner() {
     return () => {
       window.clearTimeout(timer);
     };
-  }, [
-    resumeTournament,
-    state.currentRound,
-    state.matches,
-    state.series,
-    state.status,
-    state.totalRounds,
-  ]);
+  }, [canAdvanceRound, resumeTournament]);
 
   useEffect(() => {
-    if (state.status !== "running") return;
-    if (state.totalRounds <= 0 || state.currentRound < state.totalRounds) return;
-    if (state.series.length === 0) return;
-
-    const hasPlayable = state.matches.some(
-      (match) => match.status === "waiting" || match.status === "running",
-    );
-    if (hasPlayable) return;
-
-    const hasRetryableErrors = state.matches.some(
-      (match) =>
-        match.status === "error" && (match.retryCount ?? 0) < MAX_MATCH_ERROR_RETRIES,
-    );
-    if (hasRetryableErrors) return;
-
-    const hasUnfinishedSeries = state.series.some(
-      (series) => series.status !== "finished",
-    );
-    if (hasUnfinishedSeries) return;
+    if (!isTournamentComplete) return;
 
     setRuntime((prev) =>
       prev.status === "running"
         ? { ...prev, status: "completed", error: null }
         : prev,
     );
-  }, [
-    setRuntime,
-    state.currentRound,
-    state.matches,
-    state.series,
-    state.status,
-    state.totalRounds,
-  ]);
+  }, [isTournamentComplete, setRuntime]);
 
   const resetTournament = useCallback(() => {
     runIdRef.current += 1;

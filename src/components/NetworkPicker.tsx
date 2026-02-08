@@ -119,15 +119,9 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
     localStorage.setItem("lc0-sort-column", sortColumn);
     localStorage.setItem("lc0-sort-direction", sortDirection);
     localStorage.setItem("lc0-search-term", searchTerm);
-  }, [sortColumn, sortDirection, searchTerm]);
-
-  useEffect(() => {
     localStorage.setItem(LAST_SELECTED_NETWORK_KEY, selected.id);
-  }, [selected.id]);
-
-  useEffect(() => {
     localStorage.setItem(LAST_TEMPERATURE_KEY, temperature.toString());
-  }, [temperature]);
+  }, [sortColumn, sortDirection, searchTerm, selected.id, temperature]);
 
   // Check cache status for built-in networks once on mount
   useEffect(() => {
@@ -252,6 +246,7 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
       const modelData = await decompressGzip(compressed);
       await cacheModel(cacheKey, modelData);
       setCachedModels((prev) => new Set(prev).add(net.id));
+      setSelected(net);
     } catch (e) {
       console.error("Download failed:", e);
     } finally {

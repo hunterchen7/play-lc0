@@ -136,6 +136,8 @@ export function GameScreen({
     to: string;
   } | null>(null);
   const [temperature, setTemperature] = useState(config.temperature);
+  const temperatureRef = useRef(temperature);
+  temperatureRef.current = temperature;
   const [viewingMove, setViewingMove] = useState<number | null>(null); // null = live
   const [gameSaved, setGameSaved] = useState(false);
   const [hasResigned, setHasResigned] = useState(false);
@@ -197,7 +199,8 @@ export function GameScreen({
     };
   }, [config.network.file]);
 
-  // Request engine move
+  // Request engine move — uses temperatureRef so the callback reference is stable
+  // and doesn't re-trigger the engine move effect when temperature changes.
   const requestEngineMove = useCallback(
     async (currentGame: Chess, history: string[]) => {
       const engine = engineRef.current;
@@ -212,7 +215,7 @@ export function GameScreen({
           fen,
           history,
           legalMoves,
-          temperature,
+          temperatureRef.current,
         );
 
         const moveData = uciToChessJsMove(result.move);
@@ -238,7 +241,7 @@ export function GameScreen({
         console.error("Engine move failed:", e);
       }
     },
-    [temperature],
+    [],
   );
 
   // Trigger engine move when it's the engine's turn

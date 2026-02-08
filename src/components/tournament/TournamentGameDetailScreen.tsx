@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Board } from "../Board";
 import { MoveHistory } from "../MoveHistory";
 import type {
@@ -79,6 +79,8 @@ export function TournamentGameDetailScreen({
   onBack,
 }: TournamentGameDetailScreenProps) {
   const [viewingMove, setViewingMove] = useState<number | null>(null);
+  const viewingMoveRef = useRef(viewingMove);
+  viewingMoveRef.current = viewingMove;
   const [orientation, setOrientation] = useState<"white" | "black">("white");
   const [actionLoading, setActionLoading] = useState<"restart" | "draw" | null>(
     null,
@@ -181,7 +183,7 @@ export function TournamentGameDetailScreen({
     if (match.moves.length === 0) return;
 
     const onKeyDown = (e: KeyboardEvent) => {
-      const current = viewingMove ?? match.moves.length - 1;
+      const current = viewingMoveRef.current ?? match.moves.length - 1;
 
       if (e.key === "ArrowLeft") {
         e.preventDefault();
@@ -204,7 +206,7 @@ export function TournamentGameDetailScreen({
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [match.moves.length, viewingMove]);
+  }, [match.moves.length]);
 
   return (
     <div className="w-full max-w-7xl mx-auto p-4 md:p-6 flex flex-col gap-4">

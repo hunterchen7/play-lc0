@@ -28,6 +28,7 @@ export default defineConfig({
     exclude: ['onnxruntime-web'],
   },
   server: {
+    port: 3141,
     headers: {
       'Cross-Origin-Opener-Policy': 'same-origin',
       'Cross-Origin-Embedder-Policy': 'require-corp',
