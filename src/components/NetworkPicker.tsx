@@ -89,6 +89,7 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
     return localStorage.getItem("lc0-search-term") || "";
   });
 
+  const [showDownloadedOnly, setShowDownloadedOnly] = useState(false);
   const [cachedModels, setCachedModels] = useState<Set<string>>(new Set());
   const [cacheLoading, setCacheLoading] = useState(true);
   const [downloading, setDownloading] = useState<Map<string, number>>(
@@ -160,6 +161,7 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
 
   const sortedNetworks = useMemo(() => {
     const filtered = networks.filter((net) => {
+      if (showDownloadedOnly && !cachedModels.has(net.id)) return false;
       if (!searchTerm) return true;
       const term = searchTerm.toLowerCase();
       return (
@@ -178,7 +180,7 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
       return sortDirection === "asc" ? val : -val;
     });
     return sorted;
-  }, [networks, sortColumn, sortDirection, searchTerm]);
+  }, [networks, sortColumn, sortDirection, searchTerm, showDownloadedOnly, cachedModels]);
 
   const totalCachedSize = useMemo(() => {
     let total = 0;
@@ -320,9 +322,21 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
           </div>
 
           <div className="flex items-center justify-between mb-3">
-            <div className="text-xs text-gray-500">
-              {sortedNetworks.length}{" "}
-              {sortedNetworks.length === 1 ? "network" : "networks"}
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-gray-500">
+                {sortedNetworks.length}{" "}
+                {sortedNetworks.length === 1 ? "network" : "networks"}
+              </span>
+              <button
+                onClick={() => setShowDownloadedOnly((v) => !v)}
+                className={`px-2 py-1 rounded transition-colors font-medium ${
+                  showDownloadedOnly
+                    ? "bg-emerald-800/60 text-emerald-300"
+                    : "text-gray-400 hover:text-gray-200"
+                }`}
+              >
+                {showDownloadedOnly ? "Downloaded" : "All"}
+              </button>
             </div>
             <div className="flex items-center gap-1 text-xs">
               <span className="text-gray-500 mr-1">Sort:</span>

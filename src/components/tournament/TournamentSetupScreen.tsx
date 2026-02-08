@@ -281,6 +281,7 @@ export function TournamentSetupScreen({
   const [showAddModal, setShowAddModal] = useState(false);
   const [addTemperature, setAddTemperature] = useState(0.15);
   const [modalSearch, setModalSearch] = useState("");
+  const [modalDownloadedOnly, setModalDownloadedOnly] = useState(false);
   const [modalArchFilter, setModalArchFilter] = useState("all");
   const [modalSortColumn, setModalSortColumn] = useState<SortColumn>("elo");
   const [modalSortDirection, setModalSortDirection] =
@@ -510,6 +511,7 @@ export function TournamentSetupScreen({
     const term = modalSearch.trim().toLowerCase();
 
     const filtered = networks.filter((network) => {
+      if (modalDownloadedOnly && !cachedModels.has(network.id)) return false;
       if (modalArchFilter !== "all" && network.arch !== modalArchFilter) {
         return false;
       }
@@ -539,7 +541,7 @@ export function TournamentSetupScreen({
     });
 
     return sorted;
-  }, [networks, modalArchFilter, modalSearch, modalSortColumn, modalSortDirection]);
+  }, [networks, modalArchFilter, modalSearch, modalSortColumn, modalSortDirection, modalDownloadedOnly, cachedModels]);
 
   const duplicateBlockedNetworkIds = useMemo(() => {
     const keyTemp = addTemperature.toFixed(2);
@@ -1372,6 +1374,23 @@ export function TournamentSetupScreen({
                   ))}
                 </select>
               </label>
+            </div>
+
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-gray-500">
+                {modalNetworks.length}{" "}
+                {modalNetworks.length === 1 ? "network" : "networks"}
+              </span>
+              <button
+                onClick={() => setModalDownloadedOnly((v) => !v)}
+                className={`px-2 py-1 rounded transition-colors font-medium ${
+                  modalDownloadedOnly
+                    ? "bg-emerald-800/60 text-emerald-300"
+                    : "text-gray-400 hover:text-gray-200"
+                }`}
+              >
+                {modalDownloadedOnly ? "Downloaded" : "All"}
+              </button>
             </div>
 
             <div className="grid md:grid-cols-2 gap-2 items-end">
