@@ -4,6 +4,7 @@ import type {
   TournamentMatch,
   TournamentSeries,
 } from "../../types/tournament";
+import { computePerformanceRatings } from "./performanceRating";
 
 interface CalculateStandingsArgs {
   entrants: TournamentEntrant[];
@@ -34,6 +35,7 @@ export function calculateStandings({
       losses: 0,
       playedSeries: 0,
       buchholz: 0,
+      performanceRating: 0,
     });
     opponents.set(entrant.id, []);
   }
@@ -100,6 +102,15 @@ export function calculateStandings({
       (sum, opponentId) => sum + (rows.get(opponentId)?.matchPoints ?? 0),
       0,
     );
+  }
+
+  const perfRatings = computePerformanceRatings(
+    [...matchesById.values()],
+    series,
+    entrants,
+  );
+  for (const row of rows.values()) {
+    row.performanceRating = perfRatings.get(row.entrantId) ?? 0;
   }
 
   return [...rows.values()].sort((a, b) => {

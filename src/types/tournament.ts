@@ -116,6 +116,7 @@ export interface StandingRow {
   losses: number;
   playedSeries: number;
   buchholz: number;
+  performanceRating: number;
 }
 
 export interface TournamentRuntimeState {

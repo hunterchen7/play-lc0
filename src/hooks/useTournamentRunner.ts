@@ -313,7 +313,8 @@ function areStandingsEqual(a: StandingRow[], b: StandingRow[]): boolean {
       left.draws !== right.draws ||
       left.losses !== right.losses ||
       left.playedSeries !== right.playedSeries ||
-      left.buchholz !== right.buchholz
+      left.buchholz !== right.buchholz ||
+      left.performanceRating !== right.performanceRating
     ) {
       return false;
     }

@@ -16,7 +16,8 @@ type SortColumn =
   | "seriesRecord"
   | "gameRecord"
   | "seriesTiebreak"
-  | "gameTiebreak";
+  | "gameTiebreak"
+  | "perf";
 type SortDirection = "asc" | "desc";
 
 interface HeaderWithTooltipProps {
@@ -40,6 +41,7 @@ interface CombinedStandingRow {
   gameLosses: number;
   seriesTiebreak: number;
   gameTiebreak: number;
+  performanceRating: number;
 }
 
 const RANK_COL_CLASS = "py-2 pr-2 w-12 whitespace-nowrap";
@@ -131,6 +133,7 @@ export function StandingsTable({
         gameLosses: gameRow?.losses ?? 0,
         seriesTiebreak: seriesRow.buchholz,
         gameTiebreak: gameRow?.buchholz ?? 0,
+        performanceRating: seriesRow.performanceRating,
       };
     });
   }, [entrants, gameStandings, seriesStandings]);
@@ -174,6 +177,8 @@ export function StandingsTable({
         cmp = a.seriesTiebreak - b.seriesTiebreak;
       } else if (sortColumn === "gameTiebreak") {
         cmp = a.gameTiebreak - b.gameTiebreak;
+      } else if (sortColumn === "perf") {
+        cmp = a.performanceRating - b.performanceRating;
       }
 
       if (cmp === 0) {
@@ -218,6 +223,16 @@ export function StandingsTable({
                   #{sortIndicator(sortColumn, sortDirection, "default")}
                 </button>
               </th>
+              <th className={ENTRANT_COL_CLASS}>
+                <button
+                  type="button"
+                  onClick={() => toggleSort("name")}
+                  className="hover:text-gray-200 transition-colors"
+                  title="Sort by entrant name"
+                >
+                  Entrant{sortIndicator(sortColumn, sortDirection, "name")}
+                </button>
+              </th>
               <th className={RATING_COL_CLASS}>
                 <button
                   type="button"
@@ -228,14 +243,17 @@ export function StandingsTable({
                   Rating{sortIndicator(sortColumn, sortDirection, "elo")}
                 </button>
               </th>
-              <th className={ENTRANT_COL_CLASS}>
+              <th className="py-2 pr-2">
                 <button
                   type="button"
-                  onClick={() => toggleSort("name")}
+                  onClick={() => toggleSort("perf")}
                   className="hover:text-gray-200 transition-colors"
-                  title="Sort by entrant name"
+                  title="Sort by performance rating"
                 >
-                  Entrant{sortIndicator(sortColumn, sortDirection, "name")}
+                  <HeaderWithTooltip
+                    label={`Perf${sortIndicator(sortColumn, sortDirection, "perf")}`}
+                    tooltip="FIDE Performance Rating: average opponent rating adjusted by score percentage."
+                  />
                 </button>
               </th>
               <th className="py-2 pr-2">
@@ -327,12 +345,17 @@ export function StandingsTable({
                 }`}
               >
                 <td className={RANK_COL_CLASS}>{idx + 1}</td>
+                <td className={ENTRANT_COL_CLASS}>{row.label}</td>
                 <td
                   className={`${RATING_COL_CLASS} text-gray-300 text-[11px]`}
                 >
                   {row.elo}
                 </td>
-                <td className={ENTRANT_COL_CLASS}>{row.label}</td>
+                <td className="py-2 pr-2">
+                  {row.performanceRating > 0
+                    ? Math.round(row.performanceRating)
+                    : "–"}
+                </td>
                 <td className="py-2 pr-2">{row.seriesPoints.toFixed(1)}</td>
                 <td className="py-2 pr-2 font-medium">{row.gamePoints.toFixed(1)}</td>
                 <td className="py-2 pr-2">
@@ -347,7 +370,7 @@ export function StandingsTable({
             ))}
             {sortedRows.length === 0 && (
               <tr>
-                <td colSpan={9} className="py-3 text-center text-gray-500">
+                <td colSpan={10} className="py-3 text-center text-gray-500">
                   No games yet
                 </td>
               </tr>

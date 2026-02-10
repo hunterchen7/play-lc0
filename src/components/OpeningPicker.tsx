@@ -367,7 +367,10 @@ export function OpeningPicker({
                   <span className="text-sm text-gray-200 flex-1 min-w-0 truncate">
                     {o.name}
                   </span>
-                  <span className="text-xs text-gray-500 shrink-0">
+                  <span
+                    className="text-xs text-gray-500 shrink-0"
+                    title={o.moves.map((m, i) => (i % 2 === 0 ? `${Math.floor(i / 2) + 1}. ${m}` : m)).join(" ")}
+                  >
                     {o.moves.length} moves
                   </span>
                 </button>
