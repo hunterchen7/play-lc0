@@ -1,5 +1,6 @@
 import type { NetworkInfo } from "../constants/networks";
 import type { SavedGame } from "../types/game";
+import type { SelectedOpening } from "../types/openings";
 import { NetworkPicker } from "./NetworkPicker";
 import { GameHistory } from "./GameHistory";
 
@@ -9,6 +10,8 @@ interface HomeScreenProps {
     color: "w" | "b",
     temperature: number,
     savedGame?: SavedGame,
+    startFen?: string,
+    openings?: SelectedOpening[],
   ) => void;
   onOpenTournament: () => void;
 }

@@ -1,4 +1,5 @@
 import type { NetworkInfo } from "../constants/networks";
+import type { SelectedOpening } from "./openings";
 
 export interface SavedGame {
   id: string;
@@ -15,4 +16,6 @@ export interface GameConfig {
   playerColor: "w" | "b";
   temperature: number;
   savedGame?: SavedGame;
+  startFen?: string;
+  openings?: SelectedOpening[];
 }

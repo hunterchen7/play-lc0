@@ -44,10 +44,10 @@ export default function App() {
   if (screen.type === "home") {
     return (
       <HomeScreen
-        onStart={(network, color, temperature, savedGame) =>
+        onStart={(network, color, temperature, savedGame, startFen, openings) =>
           setScreen({
             type: "game",
-            config: { network, playerColor: color, temperature, savedGame },
+            config: { network, playerColor: color, temperature, savedGame, startFen, openings },
           })
         }
         onOpenTournament={() => setScreen({ type: "tournament" })}
@@ -61,7 +61,7 @@ export default function App() {
 
   return (
     <GameScreen
-      key={screen.config.network.id + screen.config.playerColor}
+      key={screen.config.network.id + screen.config.playerColor + (screen.config.startFen ?? "")}
       config={screen.config}
       onBackToMenu={() => setScreen({ type: "home" })}
     />

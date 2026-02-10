@@ -23,6 +23,12 @@ export interface TournamentEntrant {
   label: string;
 }
 
+export interface TournamentPosition {
+  id: string;
+  name: string;
+  fen: string;
+}
+
 export interface TournamentSetupConfig {
   format: TournamentFormat;
   entrants: TournamentEntrant[];
@@ -32,6 +38,7 @@ export interface TournamentSetupConfig {
   tiebreakMode: TournamentTiebreakMode;
   maxTiebreakGames: number;
   tiebreakWinBy: number;
+  positions?: TournamentPosition[];
 }
 
 export interface TournamentPairing {
@@ -88,6 +95,7 @@ export interface TournamentMatch {
   status: MatchStatus;
   result: "1-0" | "0-1" | "1/2-1/2" | "*";
   moves: string[];
+  startFen?: string;
   fenHistory: string[];
   evalHistory: MatchEvalSnapshot[];
   pgn: string;
@@ -123,6 +131,7 @@ export interface TournamentRuntimeState {
   currentRound: number;
   totalRounds: number;
   entrants: TournamentEntrant[];
+  positions: TournamentPosition[];
   matches: TournamentMatch[];
   series: TournamentSeries[];
   standings: StandingRow[];

@@ -11,12 +11,43 @@ import {
 import { getModelUrl } from "../config";
 import { useNetworks } from "../hooks/useNetworks";
 import { AddCustomModelModal } from "./AddCustomModelModal";
+import { validateFen } from "../utils/fen";
+import { FenPreviewBoard } from "./FenPreviewBoard";
+import { OpeningPicker } from "./OpeningPicker";
+import type { SelectedOpening } from "../types/openings";
 
 type SortColumn = "elo" | "size";
 type SortDirection = "asc" | "desc";
 const LAST_SELECTED_NETWORK_KEY = "lc0-selected-network-id";
 const LAST_TEMPERATURE_KEY = "lc0-temperature";
+const LAST_FEN_KEY = "lc0-start-fen";
+const OPENINGS_KEY_PREFIX = "lc0-openings-";
 const DEFAULT_TEMPERATURE = 0.15;
+
+function loadOpeningsForNetwork(networkId: string): SelectedOpening[] {
+  try {
+    const raw = localStorage.getItem(OPENINGS_KEY_PREFIX + networkId);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (o: Record<string, unknown>) =>
+        typeof o?.id === "string" && typeof o?.name === "string",
+    );
+  } catch {
+    return [];
+  }
+}
+
+function saveOpeningsForNetwork(networkId: string, openings: SelectedOpening[]) {
+  try {
+    if (openings.length === 0) {
+      localStorage.removeItem(OPENINGS_KEY_PREFIX + networkId);
+    } else {
+      localStorage.setItem(OPENINGS_KEY_PREFIX + networkId, JSON.stringify(openings));
+    }
+  } catch { /* ignore */ }
+}
 
 interface NetworkPickerProps {
   onStart: (
@@ -24,6 +55,8 @@ interface NetworkPickerProps {
     color: "w" | "b",
     temperature: number,
     savedGame?: SavedGame,
+    startFen?: string,
+    openings?: SelectedOpening[],
   ) => void;
 }
 
@@ -101,18 +134,45 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
   const [downloadConfirm, setDownloadConfirm] = useState<NetworkInfo | null>(
     null,
   );
+  const [fenInput, setFenInput] = useState(() => {
+    return localStorage.getItem(LAST_FEN_KEY) || "";
+  });
+  const [showFenInput, setShowFenInput] = useState(() => {
+    return !!localStorage.getItem(LAST_FEN_KEY);
+  });
+  const [selectedOpenings, setSelectedOpenings] = useState<SelectedOpening[]>(
+    () => loadOpeningsForNetwork(selected.id),
+  );
+  const [showOpeningPicker, setShowOpeningPicker] = useState(false);
+
+  // Derived FEN validation — no effect needed
+  const fenValidation = useMemo(() => {
+    const trimmed = fenInput.trim();
+    if (!trimmed) return { valid: false, error: null };
+    const result = validateFen(trimmed);
+    return {
+      valid: result.valid,
+      error: result.valid ? null : (result.error ?? "Invalid FEN"),
+    };
+  }, [fenInput]);
+  const fenValid = fenValidation.valid;
+  const fenError = fenValidation.error;
+
+  const selectNetwork = useCallback((net: NetworkInfo) => {
+    setSelected(net);
+    setSelectedOpenings(loadOpeningsForNetwork(net.id));
+  }, []);
 
   // Re-resolve selected network when custom models finish loading.
-  // Only depends on `networks` — NOT `selected.id` — to avoid fighting
-  // with the user's click (the localStorage write hasn't happened yet when
-  // this runs, so reading it back would revert the selection).
   useEffect(() => {
     const savedId = localStorage.getItem(LAST_SELECTED_NETWORK_KEY);
     if (!savedId) return;
     setSelected((prev) => {
       if (prev.id === savedId) return prev;
       const found = networks.find((net) => net.id === savedId);
-      return found ?? prev;
+      if (!found) return prev;
+      setSelectedOpenings(loadOpeningsForNetwork(found.id));
+      return found;
     });
   }, [networks]);
 
@@ -122,7 +182,13 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
     localStorage.setItem("lc0-search-term", searchTerm);
     localStorage.setItem(LAST_SELECTED_NETWORK_KEY, selected.id);
     localStorage.setItem(LAST_TEMPERATURE_KEY, temperature.toString());
-  }, [sortColumn, sortDirection, searchTerm, selected.id, temperature]);
+    const trimmedFen = fenInput.trim();
+    if (trimmedFen && fenValid) {
+      localStorage.setItem(LAST_FEN_KEY, trimmedFen);
+    } else {
+      localStorage.removeItem(LAST_FEN_KEY);
+    }
+  }, [sortColumn, sortDirection, searchTerm, selected.id, temperature, fenInput, fenValid]);
 
   // Check cache status for built-in networks once on mount
   useEffect(() => {
@@ -248,7 +314,7 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
       const modelData = await decompressGzip(compressed);
       await cacheModel(cacheKey, modelData);
       setCachedModels((prev) => new Set(prev).add(net.id));
-      setSelected(net);
+      selectNetwork(net);
     } catch (e) {
       console.error("Download failed:", e);
     } finally {
@@ -292,7 +358,9 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
     if (!selectedIsCached) return;
     const actualColor =
       color === "random" ? (Math.random() < 0.5 ? "w" : "b") : color;
-    onStart(selected, actualColor, temperature);
+    const startFen = fenValid ? fenInput.trim() : undefined;
+    const openings = selectedOpenings.length > 0 ? selectedOpenings : undefined;
+    onStart(selected, actualColor, temperature, undefined, startFen, openings);
   };
 
   return (
@@ -387,7 +455,7 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
                   )}
                   <div className="flex items-stretch">
                     <button
-                      onClick={() => setSelected(net)}
+                      onClick={() => selectNetwork(net)}
                       className="flex-1 text-left px-4 py-3 min-w-0"
                     >
                       <div className="flex items-center justify-between">
@@ -564,6 +632,93 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
           </div>
         </div>
 
+        <div className="w-full">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-200">
+              Opening Book
+            </h2>
+            <button
+              onClick={() => setShowOpeningPicker(true)}
+              className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-gray-300 rounded-lg text-sm font-medium transition-colors"
+            >
+              {selectedOpenings.length > 0
+                ? `${selectedOpenings.length} selected`
+                : "Select Openings"}
+            </button>
+          </div>
+          {selectedOpenings.length > 0 && (
+            <div className="mt-2 flex flex-col gap-1.5">
+              <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
+                {selectedOpenings.slice(0, 10).map((o) => (
+                  <span
+                    key={o.id}
+                    className="inline-block px-2 py-0.5 rounded text-xs bg-emerald-900/30 text-emerald-300 border border-emerald-700/40"
+                  >
+                    {o.type === "eco" ? o.id.split(":")[0] + " " : ""}
+                    {o.name.length > 40 ? o.name.slice(0, 37) + "..." : o.name}
+                  </span>
+                ))}
+                {selectedOpenings.length > 10 && (
+                  <span className="text-xs text-gray-500">
+                    +{selectedOpenings.length - 10} more
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => {
+                  setSelectedOpenings([]);
+                  saveOpeningsForNetwork(selected.id, []);
+                }}
+                className="self-start text-xs text-gray-500 hover:text-gray-300 transition-colors"
+              >
+                Clear openings
+              </button>
+            </div>
+          )}
+          {selectedOpenings.length === 0 && (
+            <p className="text-xs text-gray-500 mt-1">
+              No openings selected. Bot will use neural network from move 1.
+            </p>
+          )}
+        </div>
+
+        <div className="w-full mt-1">
+          <button
+            onClick={() => setShowFenInput((v) => !v)}
+            className="text-sm text-gray-400 hover:text-gray-200 transition-colors"
+          >
+            {showFenInput ? "− Hide custom position" : "+ Start from custom position"}
+          </button>
+          {showFenInput && (
+            <div className="mt-2 flex flex-col gap-2">
+              <input
+                type="text"
+                placeholder="Paste FEN string..."
+                value={fenInput}
+                onChange={(e) => setFenInput(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-gray-200 placeholder-gray-500 focus:outline-none focus:border-emerald-500 transition-colors text-sm font-mono"
+              />
+              {fenError && (
+                <p className="text-xs text-red-400">{fenError}</p>
+              )}
+              {fenValid && (
+                <>
+                  <FenPreviewBoard fen={fenInput.trim()} />
+                  <button
+                    onClick={() => {
+                      setFenInput("");
+                      localStorage.removeItem(LAST_FEN_KEY);
+                    }}
+                    className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                  >
+                    Clear custom position
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
         <button
           onClick={handleStart}
           disabled={!selectedIsCached || cacheLoading}
@@ -707,6 +862,18 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
           setCachedModels((prev) => new Set(prev).add(meta.id));
         }}
       />
+
+      {showOpeningPicker && (
+        <OpeningPicker
+          onClose={() => setShowOpeningPicker(false)}
+          onConfirm={(openings) => {
+            setSelectedOpenings(openings);
+            saveOpeningsForNetwork(selected.id, openings);
+            setShowOpeningPicker(false);
+          }}
+          initialSelected={selectedOpenings}
+        />
+      )}
     </>
   );
 }
