@@ -13,6 +13,8 @@ import { useNetworks } from "../hooks/useNetworks";
 import { AddCustomModelModal } from "./AddCustomModelModal";
 import { validateFen } from "../utils/fen";
 import { FenPreviewBoard } from "./FenPreviewBoard";
+import { OpeningPicker } from "./OpeningPicker";
+import type { SelectedOpening } from "../types/openings";
 
 type SortColumn = "elo" | "size";
 type SortDirection = "asc" | "desc";
@@ -28,6 +30,7 @@ interface NetworkPickerProps {
     temperature: number,
     savedGame?: SavedGame,
     startFen?: string,
+    openings?: SelectedOpening[],
   ) => void;
 }
 
@@ -113,6 +116,8 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
   const [showFenInput, setShowFenInput] = useState(() => {
     return !!localStorage.getItem(LAST_FEN_KEY);
   });
+  const [selectedOpenings, setSelectedOpenings] = useState<SelectedOpening[]>([]);
+  const [showOpeningPicker, setShowOpeningPicker] = useState(false);
 
   // Re-resolve selected network when custom models finish loading.
   // Only depends on `networks` — NOT `selected.id` — to avoid fighting
@@ -321,7 +326,8 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
     const actualColor =
       color === "random" ? (Math.random() < 0.5 ? "w" : "b") : color;
     const startFen = fenValid ? fenInput.trim() : undefined;
-    onStart(selected, actualColor, temperature, undefined, startFen);
+    const openings = selectedOpenings.length > 0 ? selectedOpenings : undefined;
+    onStart(selected, actualColor, temperature, undefined, startFen, openings);
   };
 
   return (
@@ -593,6 +599,53 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
           </div>
         </div>
 
+        <div className="w-full">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-200">
+              Opening Book
+            </h2>
+            <button
+              onClick={() => setShowOpeningPicker(true)}
+              className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-gray-300 rounded-lg text-sm font-medium transition-colors"
+            >
+              {selectedOpenings.length > 0
+                ? `${selectedOpenings.length} selected`
+                : "Select Openings"}
+            </button>
+          </div>
+          {selectedOpenings.length > 0 && (
+            <div className="mt-2 flex flex-col gap-1.5">
+              <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
+                {selectedOpenings.slice(0, 10).map((o) => (
+                  <span
+                    key={o.id}
+                    className="inline-block px-2 py-0.5 rounded text-xs bg-emerald-900/30 text-emerald-300 border border-emerald-700/40"
+                  >
+                    {o.type === "eco" ? o.id.split(":")[0] + " " : ""}
+                    {o.name.length > 40 ? o.name.slice(0, 37) + "..." : o.name}
+                  </span>
+                ))}
+                {selectedOpenings.length > 10 && (
+                  <span className="text-xs text-gray-500">
+                    +{selectedOpenings.length - 10} more
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => setSelectedOpenings([])}
+                className="self-start text-xs text-gray-500 hover:text-gray-300 transition-colors"
+              >
+                Clear openings
+              </button>
+            </div>
+          )}
+          {selectedOpenings.length === 0 && (
+            <p className="text-xs text-gray-500 mt-1">
+              No openings selected. Bot will use neural network from move 1.
+            </p>
+          )}
+        </div>
+
         <div className="w-full mt-1">
           <button
             onClick={() => setShowFenInput((v) => !v)}
@@ -772,6 +825,16 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
           await addCustomModel(meta, data);
           setCachedModels((prev) => new Set(prev).add(meta.id));
         }}
+      />
+
+      <OpeningPicker
+        open={showOpeningPicker}
+        onClose={() => setShowOpeningPicker(false)}
+        onConfirm={(openings) => {
+          setSelectedOpenings(openings);
+          setShowOpeningPicker(false);
+        }}
+        initialSelected={selectedOpenings}
       />
     </>
   );

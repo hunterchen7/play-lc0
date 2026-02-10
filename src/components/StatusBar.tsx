@@ -5,6 +5,7 @@ interface StatusBarProps {
   gameStatus: string // e.g. "In progress", "Checkmate", "Stalemate", etc.
   lastMoveAlgebraic: string | null // e.g. "Nf3"
   playerColor: 'w' | 'b'
+  isInBook?: boolean
 }
 
 function WDLBar({ wdl, playerColor }: { wdl: [number, number, number]; playerColor: 'w' | 'b' }) {
@@ -42,10 +43,17 @@ function WDLBar({ wdl, playerColor }: { wdl: [number, number, number]; playerCol
   )
 }
 
-export function StatusBar({ engineState, gameStatus, lastMoveAlgebraic, playerColor }: StatusBarProps) {
+export function StatusBar({ engineState, gameStatus, lastMoveAlgebraic, playerColor, isInBook }: StatusBarProps) {
   return (
     <div className="bg-slate-800 rounded-lg p-4 min-w-[220px]">
-      <h3 className="text-lg font-bold text-gray-200 mb-3">Engine</h3>
+      <div className="flex items-center gap-2 mb-3">
+        <h3 className="text-lg font-bold text-gray-200">Engine</h3>
+        {isInBook && (
+          <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-800/50 text-amber-300 border border-amber-700/50">
+            Book
+          </span>
+        )}
+      </div>
 
       {/* Game Status */}
       <div className="mb-3">

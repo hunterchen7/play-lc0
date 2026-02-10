@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Chess } from "chess.js";
 import type { PieceDropHandlerArgs } from "react-chessboard";
 import { Board } from "./Board";
@@ -12,6 +12,7 @@ import { saveGame } from "../utils/savedGames";
 import { getModelUrl } from "../config";
 import type { EngineState } from "../types";
 import type { GameConfig } from "../types/game";
+import { buildOpeningTree, getBookMoves } from "../lib/openingBook";
 
 const INITIAL_ENGINE_STATE: EngineState = {
   isReady: false,
@@ -154,6 +155,12 @@ export function GameScreen({
     from: string;
     to: string;
   } | null>(null);
+  const [isInBook, setIsInBook] = useState(false);
+
+  const openingTree = useMemo(
+    () => (config.openings?.length ? buildOpeningTree(config.openings) : null),
+    [config.openings],
+  );
   const [temperature, setTemperature] = useState(config.temperature);
   const temperatureRef = useRef(temperature);
   temperatureRef.current = temperature;
@@ -272,6 +279,27 @@ export function GameScreen({
       !hasResigned &&
       game.turn() !== playerColor
     ) {
+      // Check opening book first
+      if (openingTree) {
+        const bookMoves = getBookMoves(openingTree, moveHistory);
+        if (bookMoves && bookMoves.length > 0) {
+          const bookMove = bookMoves[Math.floor(Math.random() * bookMoves.length)];
+          const move = game.move(bookMove);
+          if (move) {
+            setIsInBook(true);
+            setLastMoveAlgebraic(move.san);
+            setMoveHistory((prev) => {
+              const newMoves = [...prev, move.san];
+              saveOrUpdateCurrentGame(gameId, newMoves, config, playerColor, game);
+              return newMoves;
+            });
+            setFenHistory((prev) => [...prev, game.fen()]);
+            return;
+          }
+        } else {
+          setIsInBook(false);
+        }
+      }
       requestEngineMove(game, fenHistory);
     }
   }, [
@@ -282,6 +310,8 @@ export function GameScreen({
     playerColor,
     fenHistory,
     requestEngineMove,
+    openingTree,
+    moveHistory,
   ]);
 
   // Auto-save game on completion (final update with actual result)
@@ -426,6 +456,7 @@ export function GameScreen({
     setViewingMove(null);
     setGameSaved(false);
     setHasResigned(false);
+    setIsInBook(false);
     setEngineState((prev) => ({
       ...prev,
       lastMove: null,
@@ -549,6 +580,7 @@ export function GameScreen({
             gameStatus={getGameStatus(game)}
             lastMoveAlgebraic={lastMoveAlgebraic}
             playerColor={playerColor}
+            isInBook={isInBook}
           />
           <MoveHistory
             moves={moveHistory}
