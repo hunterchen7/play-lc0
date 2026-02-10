@@ -149,21 +149,6 @@ export function TournamentPage({ onBackToHome }: TournamentPageProps) {
     };
   }, [selectedMatch]);
 
-  if (state.status === "idle") {
-    return (
-      <TournamentSetupScreen
-        onStart={(config) => {
-          void startTournament(config);
-        }}
-        savedTournaments={savedTournaments}
-        onOpenSavedTournament={(id) => {
-          void openSavedTournament(id);
-        }}
-        onBack={onBackToHome}
-      />
-    );
-  }
-
   useEffect(() => {
     if (!selectedMatch) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -202,6 +187,21 @@ export function TournamentPage({ onBackToHome }: TournamentPageProps) {
     seriesMatches.length > 1
       ? `(${currentGameIdx + 1}/${seriesMatches.length})`
       : undefined;
+
+  if (state.status === "idle") {
+    return (
+      <TournamentSetupScreen
+        onStart={(config) => {
+          void startTournament(config);
+        }}
+        savedTournaments={savedTournaments}
+        onOpenSavedTournament={(id) => {
+          void openSavedTournament(id);
+        }}
+        onBack={onBackToHome}
+      />
+    );
+  }
 
   return (
     <>

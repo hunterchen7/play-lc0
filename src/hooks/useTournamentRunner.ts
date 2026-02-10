@@ -623,6 +623,7 @@ export function useTournamentRunner() {
     persistedRef.current?.historyRecordId ?? null,
   );
   const historyArchiveInFlightRef = useRef(false);
+  const resumeInFlightRef = useRef(false);
 
   const persistNow = useCallback((nextState: TournamentRuntimeState) => {
     if (typeof window === "undefined") return;
@@ -1950,6 +1951,7 @@ export function useTournamentRunner() {
 
   const startTournament = useCallback(
     async (config: TournamentSetupConfig) => {
+      resumeInFlightRef.current = false;
       runIdRef.current += 1;
       const runId = runIdRef.current;
       terminateAllEngines();
@@ -1997,6 +1999,8 @@ export function useTournamentRunner() {
   );
 
   const resumeTournament = useCallback(async () => {
+    if (resumeInFlightRef.current) return;
+
     const current = stateRef.current;
     if (
       current.status !== "paused" &&
@@ -2010,14 +2014,19 @@ export function useTournamentRunner() {
     const runConfig = deriveRunConfigFromState(current);
     if (!runConfig) return;
 
+    resumeInFlightRef.current = true;
     runIdRef.current += 1;
     const runId = runIdRef.current;
 
-    setRuntime((prev) => ({
-      ...prev,
-      status: "running",
-      error: null,
-    }));
+    setRuntime((prev) =>
+      prev.status === "running" && prev.error === null
+        ? prev
+        : {
+            ...prev,
+            status: "running",
+            error: null,
+          },
+    );
 
     try {
       await executeTournament(runId, runConfig);
@@ -2028,11 +2037,14 @@ export function useTournamentRunner() {
         status: "error",
         error: error instanceof Error ? error.message : String(error),
       }));
+    } finally {
+      resumeInFlightRef.current = false;
     }
   }, [executeTournament, isRunActive, setRuntime]);
 
   const pauseTournament = useCallback(() => {
     if (stateRef.current.status !== "running") return;
+    resumeInFlightRef.current = false;
     runIdRef.current += 1;
     setRuntime((prev) => ({
       ...prev,
@@ -2274,6 +2286,7 @@ export function useTournamentRunner() {
   }, [isTournamentComplete, setRuntime]);
 
   const resetTournament = useCallback(() => {
+    resumeInFlightRef.current = false;
     runIdRef.current += 1;
     terminateAllEngines();
     historyRecordIdRef.current = null;
