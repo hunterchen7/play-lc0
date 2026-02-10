@@ -7,20 +7,30 @@ interface BoardProps {
   onPieceDrop: (args: PieceDropHandlerArgs) => boolean
   boardOrientation: 'white' | 'black'
   disabled: boolean
+  sizeScale?: number
+  maxSizePx?: number
 }
 
-function useBoardSize() {
-  const [size, setSize] = useState(() =>
-    Math.floor(Math.min(window.innerHeight * 0.85, window.innerWidth * 0.85))
+function getBoardSize(sizeScale: number, maxSizePx?: number) {
+  return Math.floor(
+    Math.min(
+      window.innerHeight * sizeScale,
+      window.innerWidth * sizeScale,
+      maxSizePx ?? Infinity
+    )
   )
+}
+
+function useBoardSize(sizeScale: number, maxSizePx?: number) {
+  const [size, setSize] = useState(() => getBoardSize(sizeScale, maxSizePx))
 
   useEffect(() => {
     const update = () => {
-      setSize(Math.floor(Math.min(window.innerHeight * 0.85, window.innerWidth * 0.85)))
+      setSize(getBoardSize(sizeScale, maxSizePx))
     }
     window.addEventListener('resize', update)
     return () => window.removeEventListener('resize', update)
-  }, [])
+  }, [sizeScale, maxSizePx])
 
   return size
 }
@@ -36,8 +46,15 @@ const HIGHLIGHT_CAPTURE: React.CSSProperties = {
   background: 'radial-gradient(circle, transparent 55%, rgba(0,0,0,0.25) 55%)',
 }
 
-export function Board({ position, onPieceDrop, boardOrientation, disabled }: BoardProps) {
-  const boardSize = useBoardSize()
+export function Board({
+  position,
+  onPieceDrop,
+  boardOrientation,
+  disabled,
+  sizeScale = 0.85,
+  maxSizePx,
+}: BoardProps) {
+  const boardSize = useBoardSize(sizeScale, maxSizePx)
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null)
   const [selectedPiece, setSelectedPiece] = useState<any>(null)
 
