@@ -19,6 +19,7 @@ import {
   saveTournamentHistory,
   type TournamentHistorySummary,
 } from "../utils/tournamentHistory";
+import { assignPositionFen } from "../lib/tournament/positions";
 import type {
   EngineHealthCheck,
   MatchEvalSnapshot,
@@ -27,6 +28,7 @@ import type {
   TournamentMatch,
   TournamentMatchHealthReport,
   TournamentPairing,
+  TournamentPosition,
   TournamentRuntimeState,
   TournamentSeries,
   TournamentSetupConfig,
@@ -73,6 +75,7 @@ interface RunConfig {
   maxTiebreakGames: number;
   tiebreakWinBy: number;
   totalRounds: number;
+  positions: TournamentPosition[];
 }
 
 interface LoadedPersistedTournament {
@@ -168,6 +171,7 @@ function makeInitialState(): TournamentRuntimeState {
     currentRound: 0,
     totalRounds: 0,
     entrants: [],
+    positions: [],
     matches: [],
     series: [],
     standings: [],
@@ -195,10 +199,11 @@ function sanitizeRestoredMatch(match: TournamentMatch): TournamentMatch {
   return {
     ...match,
     status: match.status === "running" ? "waiting" : match.status,
+    startFen: match.startFen,
     fenHistory:
       Array.isArray(match.fenHistory) && match.fenHistory.length > 0
         ? match.fenHistory
-        : [START_FEN],
+        : [match.startFen ?? START_FEN],
     evalHistory: [],
     pgn: match.pgn ?? "",
   };
@@ -226,7 +231,7 @@ function snapshotStateForStorage(
     ...state,
     matches: state.matches.map((match) => ({
       ...match,
-      fenHistory: [match.fenHistory[match.fenHistory.length - 1] ?? START_FEN],
+      fenHistory: [match.fenHistory[match.fenHistory.length - 1] ?? match.startFen ?? START_FEN],
       evalHistory: [],
       pgn: "",
     })),
@@ -252,6 +257,7 @@ function loadPersistedTournament(): LoadedPersistedTournament | null {
       tiebreakMode: normalizeTiebreakMode(parsed.state.tiebreakMode),
       maxTiebreakGames: clampMaxTiebreakGames(parsed.state.maxTiebreakGames),
       tiebreakWinBy: clampTiebreakWinBy(parsed.state.tiebreakWinBy),
+      positions: Array.isArray(parsed.state.positions) ? parsed.state.positions : [],
       matches: (parsed.state.matches ?? []).map(sanitizeRestoredMatch),
       series: (parsed.state.series ?? []).map((series) =>
         sanitizeRestoredSeries(series, parsed.state.bestOf),
@@ -441,10 +447,12 @@ function buildRoundEntities(
   pairings: TournamentPairing[],
   plannedGames: number,
   startingSeriesCounter: number,
+  positions?: TournamentPosition[],
 ): RoundBuildResult {
   const series: TournamentSeries[] = [];
   const matches: TournamentMatch[] = [];
   let counter = startingSeriesCounter;
+  const posArr = positions ?? [];
 
   for (let boardIndex = 0; boardIndex < pairings.length; boardIndex++) {
     const pairing = pairings[boardIndex];
@@ -458,6 +466,9 @@ function buildRoundEntities(
       const matchId = `${seriesId}-g${seriesGameIndex}`;
       gameIds.push(matchId);
 
+      const gameFen = assignPositionFen(posArr, counter, plannedGames, gameIndex);
+      const isCustomFen = gameFen !== START_FEN;
+
       matches.push({
         id: matchId,
         seriesId,
@@ -469,7 +480,8 @@ function buildRoundEntities(
         status: "waiting",
         result: "*",
         moves: [],
-        fenHistory: [START_FEN],
+        startFen: isCustomFen ? gameFen : undefined,
+        fenHistory: [gameFen],
         evalHistory: [],
         pgn: "",
       });
@@ -510,6 +522,7 @@ function deriveRunConfigFromSetup(config: TournamentSetupConfig): RunConfig {
     maxTiebreakGames: clampMaxTiebreakGames(config.maxTiebreakGames),
     tiebreakWinBy: clampTiebreakWinBy(config.tiebreakWinBy),
     totalRounds,
+    positions: config.positions ?? [],
   };
 }
 
@@ -533,6 +546,7 @@ function deriveRunConfigFromState(state: TournamentRuntimeState): RunConfig | nu
     maxTiebreakGames: clampMaxTiebreakGames(state.maxTiebreakGames),
     tiebreakWinBy: clampTiebreakWinBy(state.tiebreakWinBy),
     totalRounds,
+    positions: state.positions ?? [],
   };
 }
 
@@ -1148,6 +1162,14 @@ export function useTournamentRunner() {
         const colors = getSeriesGameColors(series, nextSeriesGameIndex);
         const newMatchId = `${series.id}-g${nextSeriesGameIndex}`;
 
+        const posArr = prev.positions ?? [];
+        let tiebreakFen = START_FEN;
+        if (posArr.length > 0) {
+          const seriesIdx = prev.series.indexOf(series);
+          tiebreakFen = assignPositionFen(posArr, seriesIdx, series.plannedGames, nextSeriesGameIndex - 1);
+        }
+        const isCustomTiebreak = tiebreakFen !== START_FEN;
+
         const newMatch: TournamentMatch = {
           id: newMatchId,
           seriesId: series.id,
@@ -1159,7 +1181,8 @@ export function useTournamentRunner() {
           status: "waiting",
           result: "*",
           moves: [],
-          fenHistory: [START_FEN],
+          startFen: isCustomTiebreak ? tiebreakFen : undefined,
+          fenHistory: [tiebreakFen],
           evalHistory: [],
           pgn: "",
         };
@@ -1360,11 +1383,12 @@ export function useTournamentRunner() {
           ),
         }));
 
+        const matchStartFen = match.startFen ?? START_FEN;
         const baseFenHistory =
           Array.isArray(match.fenHistory) && match.fenHistory.length > 0
             ? [...match.fenHistory]
-            : [START_FEN];
-        const resumeFen = baseFenHistory[baseFenHistory.length - 1] ?? START_FEN;
+            : [matchStartFen];
+        const resumeFen = baseFenHistory[baseFenHistory.length - 1] ?? matchStartFen;
         const game = new Chess();
         try {
           game.load(resumeFen);
@@ -1507,6 +1531,7 @@ export function useTournamentRunner() {
                         board: match.board,
                         result: "*",
                         moves,
+                        startFen: match.startFen,
                       }),
                     }
                   : item,
@@ -1554,6 +1579,7 @@ export function useTournamentRunner() {
                       board: item.board,
                       result,
                       moves,
+                      startFen: item.startFen,
                     }),
                     endedAt,
                     error: timedOut
@@ -1598,6 +1624,7 @@ export function useTournamentRunner() {
                           board: item.board,
                           result,
                           moves,
+                          startFen: item.startFen,
                         }),
                         endedAt,
                         retryCount: nextRetryCount,
@@ -1854,6 +1881,7 @@ export function useTournamentRunner() {
             pairings,
             config.bestOf,
             seriesCounter,
+            config.positions,
           );
           seriesCounter = built.nextSeriesCounter;
 
@@ -1945,6 +1973,7 @@ export function useTournamentRunner() {
         currentRound: 0,
         totalRounds: runConfig.totalRounds,
         entrants: runConfig.entrants,
+        positions: runConfig.positions,
         matches: [],
         series: [],
         standings: [],
@@ -2126,6 +2155,7 @@ export function useTournamentRunner() {
                   board: item.board,
                   result: "1/2-1/2",
                   moves: item.moves,
+                  startFen: item.startFen,
                 }),
                 nextRetryAt: undefined,
               }
@@ -2166,7 +2196,7 @@ export function useTournamentRunner() {
                 status: "waiting",
                 result: "*",
                 moves: [],
-                fenHistory: [START_FEN],
+                fenHistory: [item.startFen ?? START_FEN],
                 evalHistory: [],
                 pgn: "",
                 startedAt: undefined,
@@ -2289,6 +2319,7 @@ export function useTournamentRunner() {
       byeRecipientsRef.current = new Set();
       const normalizedRestored = {
         ...restored,
+        positions: Array.isArray(restored.positions) ? restored.positions : [],
         standings:
           restored.format === "round_robin"
             ? recomputeStandingsForState(restored)
@@ -2358,6 +2389,7 @@ export function useTournamentRunner() {
           board: match.board,
           result: match.status === "finished" ? match.result : "*",
           moves: match.moves,
+          startFen: match.startFen,
         });
       })
       .join("\n\n");

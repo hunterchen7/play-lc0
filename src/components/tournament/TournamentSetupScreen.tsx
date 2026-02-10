@@ -8,6 +8,8 @@ import {
 import { getModelUrl } from "../../config";
 import { useNetworks } from "../../hooks/useNetworks";
 import { AddCustomModelModal } from "../AddCustomModelModal";
+import { OpeningPicker } from "../OpeningPicker";
+import { validateFen } from "../../utils/fen";
 import {
   getTournamentHistoryById,
   type TournamentHistorySummary,
@@ -15,9 +17,11 @@ import {
 import type {
   TournamentEntrant,
   TournamentFormat,
+  TournamentPosition,
   TournamentSetupConfig,
   TournamentTiebreakMode,
 } from "../../types/tournament";
+import type { SelectedOpening } from "../../types/openings";
 
 type SortColumn = "elo" | "size" | "name";
 type SortDirection = "asc" | "desc";
@@ -38,6 +42,7 @@ interface PersistedTournamentSetupDraft {
   tiebreakMode: TournamentTiebreakMode;
   maxTiebreakGames: number;
   tiebreakWinBy: number;
+  positions?: TournamentPosition[];
 }
 
 interface TournamentSetupScreenProps {
@@ -230,6 +235,15 @@ function loadPersistedSetupDraft(): PersistedTournamentSetupDraft | null {
       5,
     );
 
+    const positions = Array.isArray(parsed.positions)
+      ? parsed.positions.filter(
+          (p) =>
+            typeof p?.id === "string" &&
+            typeof p?.name === "string" &&
+            typeof p?.fen === "string",
+        )
+      : [];
+
     return {
       format,
       entrants,
@@ -239,6 +253,7 @@ function loadPersistedSetupDraft(): PersistedTournamentSetupDraft | null {
       tiebreakMode,
       maxTiebreakGames,
       tiebreakWinBy,
+      positions,
     };
   } catch {
     return null;
@@ -276,6 +291,16 @@ export function TournamentSetupScreen({
   );
   const [tiebreakWinBy, setTiebreakWinBy] = useState(
     persistedSetup?.tiebreakWinBy ?? DEFAULT_TIEBREAK_WIN_BY,
+  );
+
+  const [positions, setPositions] = useState<TournamentPosition[]>(
+    persistedSetup?.positions ?? [],
+  );
+  const [showOpeningPicker, setShowOpeningPicker] = useState(false);
+  const [positionFenInput, setPositionFenInput] = useState("");
+  const [positionFenError, setPositionFenError] = useState<string | null>(null);
+  const [showPositions, setShowPositions] = useState(
+    (persistedSetup?.positions?.length ?? 0) > 0,
   );
 
   const [showAddModal, setShowAddModal] = useState(false);
@@ -363,6 +388,7 @@ export function TournamentSetupScreen({
       tiebreakMode,
       maxTiebreakGames,
       tiebreakWinBy,
+      positions,
     };
 
     try {
@@ -379,6 +405,7 @@ export function TournamentSetupScreen({
     format,
     maxSimultaneousGames,
     maxTiebreakGames,
+    positions,
     swissRounds,
     tiebreakMode,
     tiebreakWinBy,
@@ -741,6 +768,7 @@ export function TournamentSetupScreen({
         tiebreakMode,
         maxTiebreakGames,
         tiebreakWinBy,
+        positions: positions.length > 0 ? positions : undefined,
       });
       if (typeof window !== "undefined") {
         window.localStorage.removeItem(TOURNAMENT_SETUP_STORAGE_KEY);
@@ -820,6 +848,12 @@ export function TournamentSetupScreen({
             1,
             5,
           ),
+        );
+        setPositions(
+          Array.isArray(restored.positions) ? restored.positions : [],
+        );
+        setShowPositions(
+          Array.isArray(restored.positions) && restored.positions.length > 0,
         );
         setAttemptedStart(false);
         setStartError(null);
@@ -1153,6 +1187,127 @@ export function TournamentSetupScreen({
                 className="w-full accent-emerald-500"
               />
             </label>
+
+            <div className="rounded-lg border border-slate-700/80 bg-slate-800/50 p-3 flex flex-col gap-3">
+              <button
+                onClick={() => setShowPositions((v) => !v)}
+                className="flex items-center justify-between w-full text-left"
+              >
+                <span className="text-xs text-gray-400 uppercase tracking-wide">
+                  Starting Positions
+                  {positions.length > 0 && (
+                    <span className="ml-2 px-1.5 py-0.5 rounded bg-emerald-900/50 text-emerald-300 text-[10px] normal-case">
+                      {positions.length}
+                    </span>
+                  )}
+                </span>
+                <span className="text-xs text-gray-500">
+                  {showPositions ? "▼" : "▶"}
+                </span>
+              </button>
+
+              {showPositions && (
+                <div className="flex flex-col gap-2">
+                  <p className="text-[11px] text-gray-500">
+                    {positions.length === 0
+                      ? "All games start from the standard position."
+                      : `${positions.length} position${positions.length === 1 ? "" : "s"} — games cycle through these.`}
+                  </p>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowOpeningPicker(true)}
+                      className="flex-1 px-2 py-1.5 bg-slate-700 hover:bg-slate-600 text-gray-200 rounded-lg text-xs"
+                    >
+                      From Opening Book
+                    </button>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <input
+                      value={positionFenInput}
+                      onChange={(e) => {
+                        setPositionFenInput(e.target.value);
+                        setPositionFenError(null);
+                      }}
+                      placeholder="Paste FEN to add custom position"
+                      className="flex-1 px-2 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-xs text-gray-200 placeholder-gray-500 font-mono focus:outline-none focus:border-emerald-500"
+                    />
+                    <button
+                      onClick={() => {
+                        const trimmed = positionFenInput.trim();
+                        if (!trimmed) return;
+                        const result = validateFen(trimmed);
+                        if (!result.valid) {
+                          setPositionFenError(result.error ?? "Invalid FEN");
+                          return;
+                        }
+                        if (positions.some((p) => p.fen === trimmed)) {
+                          setPositionFenError("Position already added");
+                          return;
+                        }
+                        setPositions((prev) => [
+                          ...prev,
+                          {
+                            id: `custom-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+                            name: `Custom FEN`,
+                            fen: trimmed,
+                          },
+                        ]);
+                        setPositionFenInput("");
+                        setPositionFenError(null);
+                      }}
+                      className="px-2 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-xs"
+                    >
+                      Add
+                    </button>
+                  </div>
+
+                  {positionFenError && (
+                    <p className="text-[11px] text-red-400">{positionFenError}</p>
+                  )}
+
+                  {positions.length > 0 && (
+                    <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto pr-1">
+                      {positions.map((pos) => (
+                        <div
+                          key={pos.id}
+                          className="flex items-center justify-between gap-2 p-2 rounded border border-slate-700 bg-slate-900/60"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-xs text-gray-200 truncate">
+                              {pos.name}
+                            </p>
+                            <p className="text-[10px] text-gray-500 font-mono truncate">
+                              {pos.fen}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() =>
+                              setPositions((prev) =>
+                                prev.filter((p) => p.id !== pos.id),
+                              )
+                            }
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-gray-400 shrink-0"
+                          >
+                            X
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {positions.length > 0 && (
+                    <button
+                      onClick={() => setPositions([])}
+                      className="text-[11px] text-gray-500 hover:text-gray-300 self-start"
+                    >
+                      Clear all positions
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
 
             <div className="rounded-lg bg-slate-800/80 p-3 text-sm text-gray-300">
               <p>
@@ -1622,6 +1777,24 @@ export function TournamentSetupScreen({
         onAdd={async (meta, data) => {
           await addCustomModel(meta, data);
           setCachedModels((prev) => new Set(prev).add(meta.id));
+        }}
+      />
+
+      <OpeningPicker
+        open={showOpeningPicker}
+        onClose={() => setShowOpeningPicker(false)}
+        onConfirm={(selected: SelectedOpening[]) => {
+          const newPositions: TournamentPosition[] = selected
+            .filter((s) => !positions.some((p) => p.fen === s.fen))
+            .map((s) => ({
+              id: s.id,
+              name: s.name,
+              fen: s.fen,
+            }));
+          if (newPositions.length > 0) {
+            setPositions((prev) => [...prev, ...newPositions]);
+          }
+          setShowOpeningPicker(false);
         }}
       />
     </>
