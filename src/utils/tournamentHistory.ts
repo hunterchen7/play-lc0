@@ -143,10 +143,13 @@ function buildPlacementEntries(standings: StandingRow[]): PlacementEntry[] {
 function buildTopPlacings(standings: StandingRow[]): string[] {
   const placements = buildPlacementEntries(standings);
   const top = placements.filter((entry) => entry.rank <= 3);
-  return top.map(
-    ({ rank, row }) =>
-      `${rank}. ${row.label} (${row.matchPoints.toFixed(1)} MP, ${row.gamePoints.toFixed(1)} GP)`,
-  );
+  return top.map(({ rank, row }) => {
+    const base = `${rank}. ${row.label} (${row.matchPoints.toFixed(1)} MP, ${row.gamePoints.toFixed(1)} GP`;
+    if (row.performanceRating > 0) {
+      return `${base}, ${Math.round(row.performanceRating)} Perf)`;
+    }
+    return `${base})`;
+  });
 }
 
 function buildWinnerLabel(standings: StandingRow[]): string | null {

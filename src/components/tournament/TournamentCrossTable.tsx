@@ -5,6 +5,10 @@ import type {
   TournamentMatch,
   TournamentSeries,
 } from "../../types/tournament";
+import {
+  computePairPerformance,
+  parseNumericElo,
+} from "../../lib/tournament/performanceRating";
 
 interface CrossCell {
   seriesPoints: number;
@@ -19,6 +23,7 @@ interface CrossCell {
   rowAsBlackWins: number;
   rowAsBlackDraws: number;
   rowAsBlackLosses: number;
+  performanceRating: number | null;
 }
 
 interface TournamentCrossTableProps {
@@ -29,7 +34,7 @@ interface TournamentCrossTableProps {
   entrants: TournamentEntrant[];
 }
 
-type SortColumn = "default" | "name" | "elo" | "matchPoints" | "gamePoints";
+type SortColumn = "default" | "name" | "elo" | "matchPoints" | "gamePoints" | "perf";
 type SortDirection = "asc" | "desc";
 
 const RANK_COL_CLASS = "py-2 pr-2 w-12 whitespace-nowrap";
@@ -112,6 +117,8 @@ export function TournamentCrossTable({
         } else {
           cmp = a.matchPoints - b.matchPoints;
         }
+      } else if (sortColumn === "perf") {
+        cmp = a.performanceRating - b.performanceRating;
       }
 
       if (cmp === 0) {
@@ -163,6 +170,7 @@ export function TournamentCrossTable({
           rowAsBlackWins: 0,
           rowAsBlackDraws: 0,
           rowAsBlackLosses: 0,
+          performanceRating: null,
         };
         rowMap.set(colId, cell);
       }
@@ -238,8 +246,31 @@ export function TournamentCrossTable({
       }
     }
 
+    // Compute per-pair performance ratings
+    const eloByEntrantId = new Map<string, number>();
+    for (const entrant of entrants) {
+      const elo = parseNumericElo(entrant.network.elo);
+      if (elo !== null) eloByEntrantId.set(entrant.id, elo);
+    }
+    const seriesById = new Map(series.map((s) => [s.id, s]));
+
+    for (const [rowId, rowMap] of byRow) {
+      for (const [colId, cell] of rowMap) {
+        if (cell.finishedGames === 0) continue;
+        const opponentElo = eloByEntrantId.get(colId);
+        if (opponentElo === undefined) continue;
+        cell.performanceRating = computePairPerformance(
+          matches,
+          seriesById,
+          rowId,
+          colId,
+          opponentElo,
+        );
+      }
+    }
+
     return byRow;
-  }, [matches, series]);
+  }, [entrants, matches, series]);
 
   if (ordered.length === 0) {
     return (
@@ -267,6 +298,16 @@ export function TournamentCrossTable({
                   #{sortIndicator(sortColumn, sortDirection, "default")}
                 </button>
               </th>
+              <th className={ENTRANT_COL_CLASS}>
+                <button
+                  type="button"
+                  onClick={() => toggleSort("name")}
+                  className="hover:text-gray-200 transition-colors"
+                  title="Sort by entrant name"
+                >
+                  Entrant{sortIndicator(sortColumn, sortDirection, "name")}
+                </button>
+              </th>
               <th className={RATING_COL_CLASS}>
                 <button
                   type="button"
@@ -277,14 +318,15 @@ export function TournamentCrossTable({
                   Rating{sortIndicator(sortColumn, sortDirection, "elo")}
                 </button>
               </th>
-              <th className={ENTRANT_COL_CLASS}>
+              <th className="py-2 pr-2 text-right">
                 <button
                   type="button"
-                  onClick={() => toggleSort("name")}
+                  onClick={() => toggleSort("perf")}
                   className="hover:text-gray-200 transition-colors"
-                  title="Sort by entrant name"
+                  title="Sort by performance rating"
                 >
-                  Entrant{sortIndicator(sortColumn, sortDirection, "name")}
+                  Perf
+                  {sortIndicator(sortColumn, sortDirection, "perf")}
                 </button>
               </th>
               {ordered.map((_, idx) => (
@@ -325,13 +367,18 @@ export function TournamentCrossTable({
                 }`}
               >
                 <td className={RANK_COL_CLASS}>{rowIndex + 1}</td>
+                <td className={`${ENTRANT_COL_CLASS} truncate max-w-72`}>
+                  {row.label}
+                </td>
                 <td
                   className={`${RATING_COL_CLASS} text-gray-300 text-[11px]`}
                 >
                   {eloByEntrant.get(row.entrantId) ?? "N/A"}
                 </td>
-                <td className={`${ENTRANT_COL_CLASS} truncate max-w-72`}>
-                  {row.label}
+                <td className="py-2 pr-2 text-right font-medium">
+                  {row.performanceRating > 0
+                    ? Math.round(row.performanceRating)
+                    : "–"}
                 </td>
                 {ordered.map((col) => {
                   if (col.entrantId === row.entrantId) {
@@ -386,7 +433,7 @@ export function TournamentCrossTable({
                       title={`${row.label} as White W-D-L: ${cell.rowAsWhiteWins}-${cell.rowAsWhiteDraws}-${cell.rowAsWhiteLosses}
 ${row.label} as Black W-D-L: ${cell.rowAsBlackWins}-${cell.rowAsBlackDraws}-${cell.rowAsBlackLosses}
 ${col.label} as White W-D-L: ${cell.rowAsBlackLosses}-${cell.rowAsBlackDraws}-${cell.rowAsBlackWins}
-${col.label} as Black W-D-L: ${cell.rowAsWhiteLosses}-${cell.rowAsWhiteDraws}-${cell.rowAsWhiteWins}`}
+${col.label} as Black W-D-L: ${cell.rowAsWhiteLosses}-${cell.rowAsWhiteDraws}-${cell.rowAsWhiteWins}${cell.performanceRating !== null ? `\nPerf: ${Math.round(cell.performanceRating)}` : ""}`}
                     >
                       <div className="text-xs font-medium text-gray-100">
                         {formatPoints(cell.seriesPoints)}
@@ -394,6 +441,11 @@ ${col.label} as Black W-D-L: ${cell.rowAsWhiteLosses}-${cell.rowAsWhiteDraws}-${
                       <div className="text-xs text-gray-400">
                         {formatPoints(cell.gamePoints)}
                       </div>
+                      {cell.performanceRating !== null && (
+                        <div className="text-[10px] text-blue-300">
+                          {Math.round(cell.performanceRating)}
+                        </div>
+                      )}
                     </td>
                   );
                 })}
@@ -411,7 +463,7 @@ ${col.label} as Black W-D-L: ${cell.rowAsWhiteLosses}-${cell.rowAsWhiteDraws}-${
         </table>
       </div>
       <p className="text-[11px] text-gray-500 mt-2">
-        Legend: cell top = series, bottom = games, x self, · unplayed, … pending
+        Legend: cell top = series, middle = games, bottom = perf, x self, · unplayed, … pending
       </p>
     </div>
   );

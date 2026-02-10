@@ -8,6 +8,7 @@ import type {
   TournamentMatch,
   TournamentRuntimeState,
 } from "../../types/tournament";
+import { computePerformanceRatings } from "../../lib/tournament/performanceRating";
 
 interface TournamentLiveScreenProps {
   state: TournamentRuntimeState;
@@ -447,6 +448,7 @@ export function TournamentLiveScreen({
         losses: 0,
         playedSeries: 0,
         buchholz: 0,
+        performanceRating: 0,
       });
       opponents.set(entrant.id, new Set<string>());
     }
@@ -490,6 +492,15 @@ export function TournamentLiveScreen({
       );
     }
 
+    const perfRatings = computePerformanceRatings(
+      state.matches,
+      state.series,
+      state.entrants,
+    );
+    for (const row of rows.values()) {
+      row.performanceRating = perfRatings.get(row.entrantId) ?? 0;
+    }
+
     return [...rows.values()].sort((a, b) => {
       if (b.gamePoints !== a.gamePoints) return b.gamePoints - a.gamePoints;
       if (b.wins !== a.wins) return b.wins - a.wins;
@@ -497,7 +508,7 @@ export function TournamentLiveScreen({
       if (b.buchholz !== a.buchholz) return b.buchholz - a.buchholz;
       return a.label.localeCompare(b.label);
     });
-  }, [seriesById, state.entrants, state.matches, state.standings]);
+  }, [seriesById, state.entrants, state.matches, state.series, state.standings]);
 
   return (
     <div className="w-full mx-auto p-4 md:p-6 flex flex-col gap-4">

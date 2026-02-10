@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NETWORKS, type NetworkInfo } from "../../constants/networks";
 import {
   cacheModel,
@@ -53,6 +53,7 @@ interface TournamentSetupScreenProps {
 }
 
 const TOURNAMENT_SETUP_STORAGE_KEY = "lc0-tournament-setup-v1";
+const SKIP_LARGE_MODEL_WARNING_KEY = "lc0-skip-large-model-warning";
 const DEFAULT_MAX_TIEBREAK_GAMES = 4;
 const DEFAULT_TIEBREAK_WIN_BY = 1;
 
@@ -105,6 +106,22 @@ function parseSizeMB(size: string): number {
   return match ? parseFloat(match[1]) : 0;
 }
 
+function parseDownloadSizeMB(size: string): number {
+  const match = size.match(/([\d.]+)\s*(KB|MB|GB)/i);
+  if (!match) return 0;
+  const value = parseFloat(match[1]);
+  const unit = match[2].toUpperCase();
+  if (unit === "KB") return value / 1024;
+  if (unit === "GB") return value * 1024;
+  return value;
+}
+
+function formatSizeMB(mb: number): string {
+  if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB`;
+  if (mb >= 1) return `${mb.toFixed(1)} MB`;
+  return `${Math.round(mb * 1024)} KB`;
+}
+
 function modelUrl(file: string): string {
   return getModelUrl(file);
 }
@@ -114,9 +131,25 @@ interface ParsedPlacement {
   label: string;
   matchPoints: string | null;
   gamePoints: string | null;
+  performanceRating: string | null;
 }
 
 function parsePlacement(value: string): ParsedPlacement {
+  // Format with perf: "1. Name (X.X MP, Y.Y GP, 1234 Perf)"
+  const perfMatch = value.match(
+    /^(\d+)\.\s+(.*?)\s+\(([-\d.]+)\s+MP,\s+([-\d.]+)\s+GP,\s+([-\d]+)\s+Perf\)$/,
+  );
+  if (perfMatch) {
+    return {
+      rank: Number(perfMatch[1]),
+      label: perfMatch[2],
+      matchPoints: perfMatch[3],
+      gamePoints: perfMatch[4],
+      performanceRating: perfMatch[5],
+    };
+  }
+
+  // Format without perf: "1. Name (X.X MP, Y.Y GP)"
   const fullMatch = value.match(
     /^(\d+)\.\s+(.*?)\s+\(([-\d.]+)\s+MP,\s+([-\d.]+)\s+GP\)$/,
   );
@@ -126,6 +159,7 @@ function parsePlacement(value: string): ParsedPlacement {
       label: fullMatch[2],
       matchPoints: fullMatch[3],
       gamePoints: fullMatch[4],
+      performanceRating: null,
     };
   }
 
@@ -136,6 +170,7 @@ function parsePlacement(value: string): ParsedPlacement {
       label: basicMatch[2],
       matchPoints: null,
       gamePoints: null,
+      performanceRating: null,
     };
   }
 
@@ -144,6 +179,7 @@ function parsePlacement(value: string): ParsedPlacement {
     label: value,
     matchPoints: null,
     gamePoints: null,
+    performanceRating: null,
   };
 }
 
@@ -326,6 +362,15 @@ export function TournamentSetupScreen({
   const [downloadConfirm, setDownloadConfirm] = useState<NetworkInfo | null>(
     null,
   );
+  const [bulkDownloadConfirm, setBulkDownloadConfirm] = useState<{
+    networks: NetworkInfo[];
+    cachedToAdd: NetworkInfo[];
+    totalSizeMB: number;
+  } | null>(null);
+  const pendingBulkAddRef = useRef<Map<string, number>>(new Map());
+  const [skipLargeModelWarning, setSkipLargeModelWarning] = useState(
+    () => typeof window !== "undefined" && window.localStorage.getItem(SKIP_LARGE_MODEL_WARNING_KEY) === "1",
+  );
   const [copyingTournamentId, setCopyingTournamentId] = useState<string | null>(
     null,
   );
@@ -463,6 +508,12 @@ export function TournamentSetupScreen({
         await cacheModel(cacheKey, modelData);
         setCachedModels((prev) => new Set(prev).add(network.id));
         setSelectedNetworkIds((prev) => new Set(prev).add(network.id));
+
+        const pendingTemp = pendingBulkAddRef.current.get(network.id);
+        if (pendingTemp !== undefined) {
+          pendingBulkAddRef.current.delete(network.id);
+          setEntrants((prev) => [...prev, createEntrantDraft(network.id, pendingTemp)]);
+        }
       } catch (error) {
         console.error("Tournament model download failed:", error);
       } finally {
@@ -483,13 +534,13 @@ export function TournamentSetupScreen({
 
   const requestDownload = useCallback(
     (network: NetworkInfo) => {
-      if (isLargeModel(network)) {
+      if (isLargeModel(network) && !skipLargeModelWarning) {
         setDownloadConfirm(network);
       } else {
         void handleDownload(network);
       }
     },
-    [handleDownload, isLargeModel],
+    [handleDownload, isLargeModel, skipLargeModelWarning],
   );
 
   const archOptions = useMemo(() => {
@@ -722,6 +773,68 @@ export function TournamentSetupScreen({
     setEntrants((prev) => [...prev, ...toAdd]);
     closeAddModal();
   };
+
+  const filteredAddableNetworks = useMemo(() => {
+    return modalNetworks.filter((n) => !duplicateBlockedNetworkIds.has(n.id));
+  }, [modalNetworks, duplicateBlockedNetworkIds]);
+
+  const executeBulkAdd = useCallback(
+    (cached: NetworkInfo[], uncached: NetworkInfo[]) => {
+      const temp = Number(addTemperature.toFixed(2));
+
+      if (cached.length > 0) {
+        const newEntrants = cached.map((n) =>
+          createEntrantDraft(n.id, temp),
+        );
+        setEntrants((prev) => [...prev, ...newEntrants]);
+      }
+
+      for (const network of uncached) {
+        pendingBulkAddRef.current.set(network.id, temp);
+        void handleDownload(network);
+      }
+
+      closeAddModal();
+    },
+    [addTemperature, handleDownload, closeAddModal],
+  );
+
+  const handleAddAllFiltered = useCallback(() => {
+    if (filteredAddableNetworks.length === 0) return;
+
+    const cached = filteredAddableNetworks.filter((n) =>
+      cachedModels.has(n.id),
+    );
+    const uncached = filteredAddableNetworks.filter(
+      (n) => !cachedModels.has(n.id),
+    );
+
+    if (uncached.length > 0) {
+      const totalMB = uncached.reduce(
+        (sum, n) => sum + parseDownloadSizeMB(n.downloadSize),
+        0,
+      );
+      if (totalMB > 50) {
+        setBulkDownloadConfirm({
+          networks: uncached,
+          cachedToAdd: cached,
+          totalSizeMB: totalMB,
+        });
+        return;
+      }
+    }
+
+    executeBulkAdd(cached, uncached);
+  }, [filteredAddableNetworks, cachedModels, executeBulkAdd]);
+
+  const confirmBulkDownload = useCallback(() => {
+    if (!bulkDownloadConfirm) return;
+    executeBulkAdd(
+      bulkDownloadConfirm.cachedToAdd,
+      bulkDownloadConfirm.networks,
+    );
+    setBulkDownloadConfirm(null);
+  }, [bulkDownloadConfirm, executeBulkAdd]);
 
   const handleStart = () => {
     setAttemptedStart(true);
@@ -1436,6 +1549,9 @@ export function TournamentSetupScreen({
                                 <span className="text-[10px] opacity-85">
                                   {placing.matchPoints} MP /{" "}
                                   {placing.gamePoints} GP
+                                  {placing.performanceRating !== null && (
+                                    <> / {placing.performanceRating} Perf</>
+                                  )}
                                 </span>
                               )}
                           </span>
@@ -1707,13 +1823,22 @@ export function TournamentSetupScreen({
                   ? ` (${selectedNetworkIds.size - selectedAddableCount} blocked)`
                   : ""}
               </p>
-              <button
-                onClick={addSelectedEntrants}
-                disabled={selectedAddableCount === 0}
-                className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-gray-500 text-white rounded-lg text-sm font-medium"
-              >
-                Add Selected ({selectedAddableCount})
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleAddAllFiltered}
+                  disabled={filteredAddableNetworks.length === 0}
+                  className="px-3 py-2 bg-sky-700 hover:bg-sky-600 disabled:bg-slate-700 disabled:text-gray-500 text-white rounded-lg text-sm font-medium"
+                >
+                  Add All Filtered ({filteredAddableNetworks.length})
+                </button>
+                <button
+                  onClick={addSelectedEntrants}
+                  disabled={selectedAddableCount === 0}
+                  className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-gray-500 text-white rounded-lg text-sm font-medium"
+                >
+                  Add Selected ({selectedAddableCount})
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1738,7 +1863,7 @@ export function TournamentSetupScreen({
           <h3 className="text-lg font-semibold text-gray-100 mb-2">
             Download large model?
           </h3>
-          <p className="text-sm text-gray-400 mb-5">
+          <p className="text-sm text-gray-400 mb-4">
             {downloadConfirm && (
               <>
                 <span className="text-gray-200 font-medium">
@@ -1750,6 +1875,25 @@ export function TournamentSetupScreen({
               </>
             )}
           </p>
+          <label className="flex items-center gap-2 mb-4 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={skipLargeModelWarning}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setSkipLargeModelWarning(checked);
+                try {
+                  if (checked) {
+                    window.localStorage.setItem(SKIP_LARGE_MODEL_WARNING_KEY, "1");
+                  } else {
+                    window.localStorage.removeItem(SKIP_LARGE_MODEL_WARNING_KEY);
+                  }
+                } catch { /* ignore */ }
+              }}
+              className="w-3.5 h-3.5 accent-emerald-500"
+            />
+            <span className="text-xs text-gray-400">Don't show this again</span>
+          </label>
           <div className="flex gap-3">
             <button
               onClick={() => setDownloadConfirm(null)}
@@ -1766,6 +1910,57 @@ export function TournamentSetupScreen({
               className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors"
             >
               Download
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div
+        className={`fixed inset-0 z-[60] flex items-center justify-center transition-opacity duration-200 ${
+          bulkDownloadConfirm
+            ? "opacity-100 pointer-events-auto"
+            : "opacity-0 pointer-events-none"
+        }`}
+      >
+        <div
+          className="absolute inset-0 bg-black/60"
+          onClick={() => setBulkDownloadConfirm(null)}
+        />
+        <div
+          className={`relative bg-slate-800 border border-slate-600 rounded-xl p-6 max-w-sm mx-4 shadow-2xl transition-transform duration-200 ${
+            bulkDownloadConfirm ? "scale-100" : "scale-95"
+          }`}
+        >
+          <h3 className="text-lg font-semibold text-gray-100 mb-2">
+            Download {bulkDownloadConfirm?.networks.length} models?
+          </h3>
+          <p className="text-sm text-gray-400 mb-5">
+            {bulkDownloadConfirm && (
+              <>
+                This will download{" "}
+                <span className="text-gray-200 font-medium">
+                  {formatSizeMB(bulkDownloadConfirm.totalSizeMB)}
+                </span>{" "}
+                across {bulkDownloadConfirm.networks.length} model
+                {bulkDownloadConfirm.networks.length === 1 ? "" : "s"}.
+                {bulkDownloadConfirm.cachedToAdd.length > 0 && (
+                  <> {bulkDownloadConfirm.cachedToAdd.length} already-cached model{bulkDownloadConfirm.cachedToAdd.length === 1 ? " will" : "s will"} be added immediately.</>
+                )}
+              </>
+            )}
+          </p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setBulkDownloadConfirm(null)}
+              className="flex-1 py-2 bg-slate-700 hover:bg-slate-600 text-gray-300 rounded-lg font-medium transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmBulkDownload}
+              className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors"
+            >
+              Download All
             </button>
           </div>
         </div>
