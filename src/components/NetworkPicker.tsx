@@ -21,7 +21,33 @@ type SortDirection = "asc" | "desc";
 const LAST_SELECTED_NETWORK_KEY = "lc0-selected-network-id";
 const LAST_TEMPERATURE_KEY = "lc0-temperature";
 const LAST_FEN_KEY = "lc0-start-fen";
+const OPENINGS_KEY_PREFIX = "lc0-openings-";
 const DEFAULT_TEMPERATURE = 0.15;
+
+function loadOpeningsForNetwork(networkId: string): SelectedOpening[] {
+  try {
+    const raw = localStorage.getItem(OPENINGS_KEY_PREFIX + networkId);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (o: Record<string, unknown>) =>
+        typeof o?.id === "string" && typeof o?.name === "string",
+    );
+  } catch {
+    return [];
+  }
+}
+
+function saveOpeningsForNetwork(networkId: string, openings: SelectedOpening[]) {
+  try {
+    if (openings.length === 0) {
+      localStorage.removeItem(OPENINGS_KEY_PREFIX + networkId);
+    } else {
+      localStorage.setItem(OPENINGS_KEY_PREFIX + networkId, JSON.stringify(openings));
+    }
+  } catch { /* ignore */ }
+}
 
 interface NetworkPickerProps {
   onStart: (
@@ -111,25 +137,42 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
   const [fenInput, setFenInput] = useState(() => {
     return localStorage.getItem(LAST_FEN_KEY) || "";
   });
-  const [fenError, setFenError] = useState<string | null>(null);
-  const [fenValid, setFenValid] = useState(false);
   const [showFenInput, setShowFenInput] = useState(() => {
     return !!localStorage.getItem(LAST_FEN_KEY);
   });
-  const [selectedOpenings, setSelectedOpenings] = useState<SelectedOpening[]>([]);
+  const [selectedOpenings, setSelectedOpenings] = useState<SelectedOpening[]>(
+    () => loadOpeningsForNetwork(selected.id),
+  );
   const [showOpeningPicker, setShowOpeningPicker] = useState(false);
 
+  // Derived FEN validation — no effect needed
+  const fenValidation = useMemo(() => {
+    const trimmed = fenInput.trim();
+    if (!trimmed) return { valid: false, error: null };
+    const result = validateFen(trimmed);
+    return {
+      valid: result.valid,
+      error: result.valid ? null : (result.error ?? "Invalid FEN"),
+    };
+  }, [fenInput]);
+  const fenValid = fenValidation.valid;
+  const fenError = fenValidation.error;
+
+  const selectNetwork = useCallback((net: NetworkInfo) => {
+    setSelected(net);
+    setSelectedOpenings(loadOpeningsForNetwork(net.id));
+  }, []);
+
   // Re-resolve selected network when custom models finish loading.
-  // Only depends on `networks` — NOT `selected.id` — to avoid fighting
-  // with the user's click (the localStorage write hasn't happened yet when
-  // this runs, so reading it back would revert the selection).
   useEffect(() => {
     const savedId = localStorage.getItem(LAST_SELECTED_NETWORK_KEY);
     if (!savedId) return;
     setSelected((prev) => {
       if (prev.id === savedId) return prev;
       const found = networks.find((net) => net.id === savedId);
-      return found ?? prev;
+      if (!found) return prev;
+      setSelectedOpenings(loadOpeningsForNetwork(found.id));
+      return found;
     });
   }, [networks]);
 
@@ -139,23 +182,13 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
     localStorage.setItem("lc0-search-term", searchTerm);
     localStorage.setItem(LAST_SELECTED_NETWORK_KEY, selected.id);
     localStorage.setItem(LAST_TEMPERATURE_KEY, temperature.toString());
-  }, [sortColumn, sortDirection, searchTerm, selected.id, temperature]);
-
-  useEffect(() => {
-    const trimmed = fenInput.trim();
-    if (!trimmed) {
-      setFenValid(false);
-      setFenError(null);
+    const trimmedFen = fenInput.trim();
+    if (trimmedFen && fenValid) {
+      localStorage.setItem(LAST_FEN_KEY, trimmedFen);
+    } else {
       localStorage.removeItem(LAST_FEN_KEY);
-      return;
     }
-    const result = validateFen(trimmed);
-    setFenValid(result.valid);
-    setFenError(result.valid ? null : (result.error ?? "Invalid FEN"));
-    if (result.valid) {
-      localStorage.setItem(LAST_FEN_KEY, trimmed);
-    }
-  }, [fenInput]);
+  }, [sortColumn, sortDirection, searchTerm, selected.id, temperature, fenInput, fenValid]);
 
   // Check cache status for built-in networks once on mount
   useEffect(() => {
@@ -281,7 +314,7 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
       const modelData = await decompressGzip(compressed);
       await cacheModel(cacheKey, modelData);
       setCachedModels((prev) => new Set(prev).add(net.id));
-      setSelected(net);
+      selectNetwork(net);
     } catch (e) {
       console.error("Download failed:", e);
     } finally {
@@ -422,7 +455,7 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
                   )}
                   <div className="flex items-stretch">
                     <button
-                      onClick={() => setSelected(net)}
+                      onClick={() => selectNetwork(net)}
                       className="flex-1 text-left px-4 py-3 min-w-0"
                     >
                       <div className="flex items-center justify-between">
@@ -632,7 +665,10 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
                 )}
               </div>
               <button
-                onClick={() => setSelectedOpenings([])}
+                onClick={() => {
+                  setSelectedOpenings([]);
+                  saveOpeningsForNetwork(selected.id, []);
+                }}
                 className="self-start text-xs text-gray-500 hover:text-gray-300 transition-colors"
               >
                 Clear openings
@@ -827,15 +863,17 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
         }}
       />
 
-      <OpeningPicker
-        open={showOpeningPicker}
-        onClose={() => setShowOpeningPicker(false)}
-        onConfirm={(openings) => {
-          setSelectedOpenings(openings);
-          setShowOpeningPicker(false);
-        }}
-        initialSelected={selectedOpenings}
-      />
+      {showOpeningPicker && (
+        <OpeningPicker
+          onClose={() => setShowOpeningPicker(false)}
+          onConfirm={(openings) => {
+            setSelectedOpenings(openings);
+            saveOpeningsForNetwork(selected.id, openings);
+            setShowOpeningPicker(false);
+          }}
+          initialSelected={selectedOpenings}
+        />
+      )}
     </>
   );
 }

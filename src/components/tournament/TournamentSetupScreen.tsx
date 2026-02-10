@@ -1780,23 +1780,24 @@ export function TournamentSetupScreen({
         }}
       />
 
-      <OpeningPicker
-        open={showOpeningPicker}
-        onClose={() => setShowOpeningPicker(false)}
-        onConfirm={(selected: SelectedOpening[]) => {
-          const newPositions: TournamentPosition[] = selected
-            .filter((s) => !positions.some((p) => p.fen === s.fen))
-            .map((s) => ({
-              id: s.id,
-              name: s.name,
-              fen: s.fen,
-            }));
-          if (newPositions.length > 0) {
-            setPositions((prev) => [...prev, ...newPositions]);
-          }
-          setShowOpeningPicker(false);
-        }}
-      />
+      {showOpeningPicker && (
+        <OpeningPicker
+          onClose={() => setShowOpeningPicker(false)}
+          onConfirm={(selected: SelectedOpening[]) => {
+            const newPositions: TournamentPosition[] = selected
+              .filter((s) => !positions.some((p) => p.fen === s.fen))
+              .map((s) => ({
+                id: s.id,
+                name: s.name,
+                fen: s.fen,
+              }));
+            if (newPositions.length > 0) {
+              setPositions((prev) => [...prev, ...newPositions]);
+            }
+            setShowOpeningPicker(false);
+          }}
+        />
+      )}
     </>
   );
 }

@@ -1,12 +1,11 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { OPENINGS } from "../data/openings";
-import { ECO_CATEGORIES, type SelectedOpening } from "../types/openings";
+import { fetchOpenings } from "../data/openings";
+import { ECO_CATEGORIES, type SelectedOpening, type Opening } from "../types/openings";
 import { validateFen } from "../utils/fen";
 import { FenPreviewBoard } from "./FenPreviewBoard";
 import { Chess } from "chess.js";
 
 interface OpeningPickerProps {
-  open: boolean;
   onClose: () => void;
   onConfirm: (selected: SelectedOpening[]) => void;
   initialSelected?: SelectedOpening[];
@@ -16,21 +15,26 @@ function moveToUci(move: { from: string; to: string; promotion?: string }) {
   return move.from + move.to + (move.promotion || "");
 }
 
+type IndexedOpening = Opening & { idx: number };
+
 export function OpeningPicker({
-  open,
   onClose,
   onConfirm,
   initialSelected,
 }: OpeningPickerProps) {
+  const [openings, setOpenings] = useState<IndexedOpening[]>([]);
+  const [loading, setLoading] = useState(true);
+
   const [search, setSearch] = useState("");
   const [ecoFilter, setEcoFilter] = useState("all");
-  const [selected, setSelected] = useState<Set<string>>(() => {
-    if (!initialSelected) return new Set();
-    return new Set(initialSelected.map((o) => o.id));
-  });
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(initialSelected?.map((o) => o.id) ?? []),
+  );
   const [customOpenings, setCustomOpenings] = useState<SelectedOpening[]>(
     () => initialSelected?.filter((o) => o.type === "custom") ?? [],
   );
+
+  const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null);
 
   // Custom opening form
   const [showCustomForm, setShowCustomForm] = useState(false);
@@ -38,77 +42,73 @@ export function OpeningPicker({
   const [customMoves, setCustomMoves] = useState("");
   const [customFen, setCustomFen] = useState("");
   const [customMode, setCustomMode] = useState<"moves" | "fen">("moves");
-  const [customError, setCustomError] = useState<string | null>(null);
-  const [customPreviewFen, setCustomPreviewFen] = useState<string | null>(null);
 
-  // Re-sync when initial selection changes (e.g. modal reopened)
   useEffect(() => {
-    if (!open) return;
-    if (initialSelected) {
-      setSelected(new Set(initialSelected.map((o) => o.id)));
-      setCustomOpenings(initialSelected.filter((o) => o.type === "custom"));
-    } else {
-      setSelected(new Set());
-      setCustomOpenings([]);
-    }
-  }, [open, initialSelected]);
+    let cancelled = false;
+    fetchOpenings().then((data) => {
+      if (cancelled) return;
+      setOpenings(data.map((o, i) => ({ ...o, idx: i })));
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
-  // Validate custom input
-  useEffect(() => {
+  // Derived validation — no effect needed
+  const { customError, customPreviewFen } = useMemo(() => {
     if (customMode === "fen") {
-      if (!customFen.trim()) {
-        setCustomError(null);
-        setCustomPreviewFen(null);
-        return;
-      }
+      if (!customFen.trim())
+        return { customError: null, customPreviewFen: null };
       const result = validateFen(customFen.trim());
-      if (result.valid) {
-        setCustomError(null);
-        setCustomPreviewFen(customFen.trim());
-      } else {
-        setCustomError(result.error ?? "Invalid FEN");
-        setCustomPreviewFen(null);
-      }
-    } else {
-      if (!customMoves.trim()) {
-        setCustomError(null);
-        setCustomPreviewFen(null);
-        return;
-      }
-      const chess = new Chess();
-      const moves = customMoves.trim().replace(/\d+\.\s*/g, "").split(/\s+/).filter(Boolean);
-      for (const m of moves) {
-        try {
-          const result = chess.move(m);
-          if (!result) {
-            setCustomError(`Invalid move: ${m}`);
-            setCustomPreviewFen(null);
-            return;
-          }
-        } catch {
-          setCustomError(`Invalid move: ${m}`);
-          setCustomPreviewFen(null);
-          return;
-        }
-      }
-      setCustomError(null);
-      setCustomPreviewFen(chess.fen());
+      if (result.valid)
+        return { customError: null, customPreviewFen: customFen.trim() };
+      return {
+        customError: result.error ?? "Invalid FEN",
+        customPreviewFen: null,
+      };
     }
+    if (!customMoves.trim())
+      return { customError: null, customPreviewFen: null };
+    const chess = new Chess();
+    const moves = customMoves
+      .trim()
+      .replace(/\d+\.\s*/g, "")
+      .split(/\s+/)
+      .filter(Boolean);
+    for (const m of moves) {
+      try {
+        const result = chess.move(m);
+        if (!result)
+          return { customError: `Invalid move: ${m}`, customPreviewFen: null };
+      } catch {
+        return { customError: `Invalid move: ${m}`, customPreviewFen: null };
+      }
+    }
+    return { customError: null, customPreviewFen: chess.fen() };
   }, [customMode, customMoves, customFen]);
 
   const filtered = useMemo(() => {
-    return OPENINGS.filter((o) => {
+    const term = search.toLowerCase().trim();
+    const searchMoves = term
+      ? term.replace(/\d+\.+\s*/g, "").split(/\s+/).filter(Boolean)
+      : [];
+
+    return openings.filter((o) => {
       if (ecoFilter !== "all" && !o.eco.startsWith(ecoFilter)) return false;
-      if (search) {
-        const term = search.toLowerCase();
-        return (
-          o.name.toLowerCase().includes(term) ||
-          o.eco.toLowerCase().includes(term)
-        );
-      }
-      return true;
+      if (!term) return true;
+      if (o.name.toLowerCase().includes(term) || o.eco.toLowerCase().includes(term)) return true;
+      if (
+        searchMoves.length > 0 &&
+        searchMoves.every((m, i) =>
+          i === searchMoves.length - 1
+            ? o.moves[i]?.toLowerCase().startsWith(m.toLowerCase())
+            : o.moves[i]?.toLowerCase() === m.toLowerCase(),
+        )
+      ) return true;
+      return false;
     });
-  }, [search, ecoFilter]);
+  }, [search, ecoFilter, openings]);
+
+  const visibleOpenings = filtered;
 
   const toggleOpening = useCallback((id: string) => {
     setSelected((prev) => {
@@ -122,13 +122,13 @@ export function OpeningPicker({
   const selectAllFiltered = useCallback(() => {
     setSelected((prev) => {
       const next = new Set(prev);
-      for (const o of filtered) next.add(o.eco + ":" + o.name);
+      for (const o of filtered) next.add(String(o.idx));
       return next;
     });
   }, [filtered]);
 
   const deselectAllFiltered = useCallback(() => {
-    const filteredIds = new Set(filtered.map((o) => o.eco + ":" + o.name));
+    const filteredIds = new Set(filtered.map((o) => String(o.idx)));
     setSelected((prev) => {
       const next = new Set(prev);
       for (const id of filteredIds) next.delete(id);
@@ -140,7 +140,9 @@ export function OpeningPicker({
     if (customError || (!customMoves.trim() && !customFen.trim())) return;
 
     const id = `custom-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    const name = customName.trim() || (customMode === "fen" ? "Custom Position" : "Custom Opening");
+    const name =
+      customName.trim() ||
+      (customMode === "fen" ? "Custom Position" : "Custom Opening");
 
     let opening: SelectedOpening;
     if (customMode === "fen") {
@@ -156,7 +158,11 @@ export function OpeningPicker({
       const chess = new Chess();
       const sanMoves: string[] = [];
       const uciMoves: string[] = [];
-      const rawMoves = customMoves.trim().replace(/\d+\.\s*/g, "").split(/\s+/).filter(Boolean);
+      const rawMoves = customMoves
+        .trim()
+        .replace(/\d+\.\s*/g, "")
+        .split(/\s+/)
+        .filter(Boolean);
       for (const m of rawMoves) {
         const result = chess.move(m);
         if (!result) break;
@@ -178,7 +184,6 @@ export function OpeningPicker({
     setCustomName("");
     setCustomMoves("");
     setCustomFen("");
-    setCustomPreviewFen(null);
     setShowCustomForm(false);
   }, [customError, customMode, customMoves, customFen, customName]);
 
@@ -194,9 +199,8 @@ export function OpeningPicker({
   const handleConfirm = useCallback(() => {
     const result: SelectedOpening[] = [];
 
-    // ECO openings
-    for (const o of OPENINGS) {
-      const id = o.eco + ":" + o.name;
+    for (const o of openings) {
+      const id = String(o.idx);
       if (selected.has(id)) {
         result.push({
           type: "eco",
@@ -209,7 +213,6 @@ export function OpeningPicker({
       }
     }
 
-    // Custom openings
     for (const o of customOpenings) {
       if (selected.has(o.id)) {
         result.push(o);
@@ -217,14 +220,16 @@ export function OpeningPicker({
     }
 
     onConfirm(result);
-  }, [selected, customOpenings, onConfirm]);
+  }, [selected, customOpenings, onConfirm, openings]);
+
+  const resetFilterView = useCallback(() => {
+    setLastClickedIndex(null);
+  }, []);
 
   const selectedCount = selected.size;
-  const allFilteredSelected = filtered.every((o) =>
-    selected.has(o.eco + ":" + o.name),
-  );
-
-  if (!open) return null;
+  const allFilteredSelected =
+    filtered.length > 0 &&
+    filtered.every((o) => selected.has(String(o.idx)));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -237,7 +242,7 @@ export function OpeningPicker({
               Opening Book
             </h3>
             <p className="text-xs text-gray-400 mt-0.5">
-              {OPENINGS.length} ECO openings available
+              {openings.length > 0 ? `${openings.length} openings available` : "Loading..."}
             </p>
           </div>
           <button
@@ -252,8 +257,11 @@ export function OpeningPicker({
         <div className="flex gap-2">
           <input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name or ECO code..."
+            onChange={(e) => {
+              setSearch(e.target.value);
+              resetFilterView();
+            }}
+            placeholder="Search by name, ECO code, or moves..."
             className="flex-1 px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-emerald-500 transition-colors"
           />
         </div>
@@ -261,7 +269,10 @@ export function OpeningPicker({
         {/* ECO category buttons */}
         <div className="flex items-center gap-1.5 flex-wrap">
           <button
-            onClick={() => setEcoFilter("all")}
+            onClick={() => {
+              setEcoFilter("all");
+              resetFilterView();
+            }}
             className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
               ecoFilter === "all"
                 ? "bg-emerald-800/60 text-emerald-300"
@@ -272,10 +283,11 @@ export function OpeningPicker({
           </button>
           {ECO_CATEGORIES.map((cat) => (
             <button
-              key={cat.prefix}
-              onClick={() =>
-                setEcoFilter(ecoFilter === cat.prefix ? "all" : cat.prefix)
-              }
+              key={cat.label}
+              onClick={() => {
+                setEcoFilter(ecoFilter === cat.prefix ? "all" : cat.prefix);
+                resetFilterView();
+              }}
               className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
                 ecoFilter === cat.prefix
                   ? "bg-emerald-800/60 text-emerald-300"
@@ -290,30 +302,57 @@ export function OpeningPicker({
         {/* Stats + Select all */}
         <div className="flex items-center justify-between text-xs">
           <span className="text-gray-500">
-            {filtered.length} openings shown · {selectedCount} selected
+            {filtered.length} shown · {selectedCount} selected
           </span>
           <button
-            onClick={allFilteredSelected ? deselectAllFiltered : selectAllFiltered}
+            onClick={
+              allFilteredSelected ? deselectAllFiltered : selectAllFiltered
+            }
             className="text-emerald-400 hover:text-emerald-300 font-medium"
           >
-            {allFilteredSelected ? "Deselect all filtered" : "Select all filtered"}
+            {allFilteredSelected
+              ? "Deselect all filtered"
+              : "Select all filtered"}
           </button>
         </div>
 
         {/* Opening list */}
-        <div className="min-h-0 flex-1 overflow-y-auto border border-slate-700 rounded-lg bg-slate-950/50">
+        <div className="min-h-0 flex-1 overflow-y-auto border border-slate-700 rounded-lg bg-slate-950/50" style={{ minHeight: "300px" }}>
+          {loading ? (
+            <div className="flex items-center justify-center h-full min-h-[300px] text-gray-500 text-sm">
+              Loading openings...
+            </div>
+          ) : visibleOpenings.length === 0 ? (
+            <div className="flex items-center justify-center h-full min-h-[300px] text-gray-500 text-sm">
+              No openings found for &ldquo;{search}&rdquo;
+            </div>
+          ) : (
           <div className="divide-y divide-slate-800">
-            {filtered.map((o) => {
-              const id = o.eco + ":" + o.name;
+            {visibleOpenings.map((o, idx) => {
+              const id = String(o.idx);
               const isSelected = selected.has(id);
               return (
                 <button
                   key={id}
-                  onClick={() => toggleOpening(id)}
+                  onClick={(e) => {
+                    if (e.shiftKey && lastClickedIndex !== null) {
+                      const start = Math.min(lastClickedIndex, idx);
+                      const end = Math.max(lastClickedIndex, idx);
+                      setSelected((prev) => {
+                        const next = new Set(prev);
+                        for (let i = start; i <= end; i++) {
+                          const item = visibleOpenings[i];
+                          if (item) next.add(String(item.idx));
+                        }
+                        return next;
+                      });
+                    } else {
+                      toggleOpening(id);
+                    }
+                    setLastClickedIndex(idx);
+                  }}
                   className={`w-full text-left px-3 py-2 flex items-center gap-3 transition-colors ${
-                    isSelected
-                      ? "bg-emerald-900/20"
-                      : "hover:bg-slate-800/50"
+                    isSelected ? "bg-emerald-900/20" : "hover:bg-slate-800/50"
                   }`}
                 >
                   <input
@@ -335,6 +374,7 @@ export function OpeningPicker({
               );
             })}
           </div>
+          )}
         </div>
 
         {/* Custom openings */}
@@ -353,9 +393,7 @@ export function OpeningPicker({
                       : "border-slate-700 bg-slate-800 text-gray-300"
                   }`}
                 >
-                  <button onClick={() => toggleOpening(o.id)}>
-                    {o.name}
-                  </button>
+                  <button onClick={() => toggleOpening(o.id)}>{o.name}</button>
                   <button
                     onClick={() => removeCustom(o.id)}
                     className="text-gray-500 hover:text-red-400 ml-1"
@@ -374,7 +412,9 @@ export function OpeningPicker({
             onClick={() => setShowCustomForm((v) => !v)}
             className="text-xs text-gray-400 hover:text-gray-200 transition-colors"
           >
-            {showCustomForm ? "- Hide custom opening form" : "+ Add custom opening"}
+            {showCustomForm
+              ? "- Hide custom opening form"
+              : "+ Add custom opening"}
           </button>
           {showCustomForm && (
             <div className="mt-2 flex flex-col gap-2 p-3 border border-slate-700 rounded-lg bg-slate-800/50">
@@ -424,12 +464,12 @@ export function OpeningPicker({
               {customError && (
                 <p className="text-xs text-red-400">{customError}</p>
               )}
-              {customPreviewFen && (
-                <FenPreviewBoard fen={customPreviewFen} />
-              )}
+              {customPreviewFen && <FenPreviewBoard fen={customPreviewFen} />}
               <button
                 onClick={handleAddCustom}
-                disabled={!!customError || (!customMoves.trim() && !customFen.trim())}
+                disabled={
+                  !!customError || (!customMoves.trim() && !customFen.trim())
+                }
                 className="self-start px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 disabled:bg-slate-700 disabled:text-gray-500 text-white rounded text-xs font-medium"
               >
                 Add
