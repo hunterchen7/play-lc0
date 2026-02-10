@@ -15,4 +15,5 @@ export interface GameConfig {
   playerColor: "w" | "b";
   temperature: number;
   savedGame?: SavedGame;
+  startFen?: string;
 }

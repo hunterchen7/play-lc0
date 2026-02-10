@@ -9,6 +9,7 @@ interface HomeScreenProps {
     color: "w" | "b",
     temperature: number,
     savedGame?: SavedGame,
+    startFen?: string,
   ) => void;
   onOpenTournament: () => void;
 }

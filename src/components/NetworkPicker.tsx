@@ -11,11 +11,14 @@ import {
 import { getModelUrl } from "../config";
 import { useNetworks } from "../hooks/useNetworks";
 import { AddCustomModelModal } from "./AddCustomModelModal";
+import { validateFen } from "../utils/fen";
+import { FenPreviewBoard } from "./FenPreviewBoard";
 
 type SortColumn = "elo" | "size";
 type SortDirection = "asc" | "desc";
 const LAST_SELECTED_NETWORK_KEY = "lc0-selected-network-id";
 const LAST_TEMPERATURE_KEY = "lc0-temperature";
+const LAST_FEN_KEY = "lc0-start-fen";
 const DEFAULT_TEMPERATURE = 0.15;
 
 interface NetworkPickerProps {
@@ -24,6 +27,7 @@ interface NetworkPickerProps {
     color: "w" | "b",
     temperature: number,
     savedGame?: SavedGame,
+    startFen?: string,
   ) => void;
 }
 
@@ -101,6 +105,14 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
   const [downloadConfirm, setDownloadConfirm] = useState<NetworkInfo | null>(
     null,
   );
+  const [fenInput, setFenInput] = useState(() => {
+    return localStorage.getItem(LAST_FEN_KEY) || "";
+  });
+  const [fenError, setFenError] = useState<string | null>(null);
+  const [fenValid, setFenValid] = useState(false);
+  const [showFenInput, setShowFenInput] = useState(() => {
+    return !!localStorage.getItem(LAST_FEN_KEY);
+  });
 
   // Re-resolve selected network when custom models finish loading.
   // Only depends on `networks` — NOT `selected.id` — to avoid fighting
@@ -123,6 +135,22 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
     localStorage.setItem(LAST_SELECTED_NETWORK_KEY, selected.id);
     localStorage.setItem(LAST_TEMPERATURE_KEY, temperature.toString());
   }, [sortColumn, sortDirection, searchTerm, selected.id, temperature]);
+
+  useEffect(() => {
+    const trimmed = fenInput.trim();
+    if (!trimmed) {
+      setFenValid(false);
+      setFenError(null);
+      localStorage.removeItem(LAST_FEN_KEY);
+      return;
+    }
+    const result = validateFen(trimmed);
+    setFenValid(result.valid);
+    setFenError(result.valid ? null : (result.error ?? "Invalid FEN"));
+    if (result.valid) {
+      localStorage.setItem(LAST_FEN_KEY, trimmed);
+    }
+  }, [fenInput]);
 
   // Check cache status for built-in networks once on mount
   useEffect(() => {
@@ -292,7 +320,8 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
     if (!selectedIsCached) return;
     const actualColor =
       color === "random" ? (Math.random() < 0.5 ? "w" : "b") : color;
-    onStart(selected, actualColor, temperature);
+    const startFen = fenValid ? fenInput.trim() : undefined;
+    onStart(selected, actualColor, temperature, undefined, startFen);
   };
 
   return (
@@ -562,6 +591,43 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
               <span>More random</span>
             </div>
           </div>
+        </div>
+
+        <div className="w-full mt-1">
+          <button
+            onClick={() => setShowFenInput((v) => !v)}
+            className="text-sm text-gray-400 hover:text-gray-200 transition-colors"
+          >
+            {showFenInput ? "− Hide custom position" : "+ Start from custom position"}
+          </button>
+          {showFenInput && (
+            <div className="mt-2 flex flex-col gap-2">
+              <input
+                type="text"
+                placeholder="Paste FEN string..."
+                value={fenInput}
+                onChange={(e) => setFenInput(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-gray-200 placeholder-gray-500 focus:outline-none focus:border-emerald-500 transition-colors text-sm font-mono"
+              />
+              {fenError && (
+                <p className="text-xs text-red-400">{fenError}</p>
+              )}
+              {fenValid && (
+                <>
+                  <FenPreviewBoard fen={fenInput.trim()} />
+                  <button
+                    onClick={() => {
+                      setFenInput("");
+                      localStorage.removeItem(LAST_FEN_KEY);
+                    }}
+                    className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                  >
+                    Clear custom position
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         <button

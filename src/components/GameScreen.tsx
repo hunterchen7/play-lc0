@@ -73,10 +73,28 @@ function buildPgn(
   pgn += `[Date "${dateStr}"]\n`;
   pgn += `[White "${white}"]\n`;
   pgn += `[Black "${black}"]\n`;
-  pgn += `[Result "${result}"]\n\n`;
+  pgn += `[Result "${result}"]\n`;
+  if (config.startFen) {
+    pgn += `[SetUp "1"]\n`;
+    pgn += `[FEN "${config.startFen}"]\n`;
+  }
+  pgn += `\n`;
+
+  const startMoveNum = config.startFen
+    ? parseInt(config.startFen.split(" ")[5] ?? "1", 10) || 1
+    : 1;
+  const startFromBlack = config.startFen
+    ? config.startFen.split(" ")[1] === "b"
+    : false;
 
   for (let i = 0; i < moves.length; i++) {
-    if (i % 2 === 0) pgn += `${Math.floor(i / 2) + 1}. `;
+    const plyOffset = startFromBlack ? i + 1 : i;
+    const moveNum = Math.floor(plyOffset / 2) + startMoveNum;
+    if (i === 0 && startFromBlack) {
+      pgn += `${moveNum}... `;
+    } else if (plyOffset % 2 === 0) {
+      pgn += `${moveNum}. `;
+    }
     pgn += `${moves[i]} `;
   }
   pgn += result;
@@ -106,13 +124,14 @@ export function GameScreen({
       config.savedGame.moves.forEach((move) => chess.move(move));
       return chess;
     }
-    return new Chess();
+    return config.startFen ? new Chess(config.startFen) : new Chess();
   });
   const [engineState, setEngineState] =
     useState<EngineState>(INITIAL_ENGINE_STATE);
   const [boardOrientation, setBoardOrientation] = useState<"white" | "black">(
     config.playerColor === "w" ? "white" : "black",
   );
+  const startingFen = config.startFen ?? new Chess().fen();
   const [fenHistory, setFenHistory] = useState<string[]>(() => {
     if (config.savedGame) {
       const fens = [new Chess().fen()];
@@ -123,7 +142,7 @@ export function GameScreen({
       });
       return fens;
     }
-    return [new Chess().fen()];
+    return [startingFen];
   });
   const [moveHistory, setMoveHistory] = useState<string[]>(
     () => config.savedGame?.moves || [],
@@ -399,7 +418,7 @@ export function GameScreen({
     const newColor = playerColor === "w" ? "b" : "w";
     setPlayerColor(newColor);
     setBoardOrientation(newColor === "w" ? "white" : "black");
-    const newGame = new Chess();
+    const newGame = config.startFen ? new Chess(config.startFen) : new Chess();
     setGame(newGame);
     setFenHistory([newGame.fen()]);
     setMoveHistory([]);
