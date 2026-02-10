@@ -61,6 +61,10 @@ function toFullMoveCount(plies: number): number {
   return Math.ceil(plies / 2);
 }
 
+function withRating(label: string, rating?: string): string {
+  return rating ? `${label} (${rating})` : label;
+}
+
 function matchStatusPriority(status: string): number {
   if (status === "running") return 0;
   if (status === "error") return 1;
@@ -762,6 +766,14 @@ export function TournamentLiveScreen({
                     const black = entrantsById.get(
                       selectedMatch.blackEntrantId,
                     ) as TournamentEntrant | undefined;
+                    const whiteLabel = withRating(
+                      white?.label ?? selectedMatch.whiteEntrantId,
+                      white?.network.elo,
+                    );
+                    const blackLabel = withRating(
+                      black?.label ?? selectedMatch.blackEntrantId,
+                      black?.network.elo,
+                    );
 
                     return (
                       <div
@@ -830,12 +842,12 @@ export function TournamentLiveScreen({
                           </span>
                         </div>
 
-                        <p className="text-sm text-gray-100 truncate">
-                          {white?.label ?? selectedMatch.whiteEntrantId}
+                        <p className="text-sm text-gray-100 truncate" title={whiteLabel}>
+                          {whiteLabel}
                         </p>
                         <p className="text-xs text-gray-500 my-1">vs</p>
-                        <p className="text-sm text-gray-100 truncate">
-                          {black?.label ?? selectedMatch.blackEntrantId}
+                        <p className="text-sm text-gray-100 truncate" title={blackLabel}>
+                          {blackLabel}
                         </p>
 
                         <div className="mt-3 text-xs text-gray-400 flex items-center justify-between">
@@ -878,6 +890,14 @@ export function TournamentLiveScreen({
                       const black = entrantsById.get(match.blackEntrantId) as
                         | TournamentEntrant
                         | undefined;
+                      const whiteLabel = withRating(
+                        white?.label ?? match.whiteEntrantId,
+                        white?.network.elo,
+                      );
+                      const blackLabel = withRating(
+                        black?.label ?? match.blackEntrantId,
+                        black?.network.elo,
+                      );
 
                       return (
                         <button
@@ -906,12 +926,12 @@ export function TournamentLiveScreen({
                             />
                           </div>
 
-                          <p className="text-sm text-gray-100 truncate">
-                            {white?.label ?? match.whiteEntrantId}
+                          <p className="text-sm text-gray-100 truncate" title={whiteLabel}>
+                            {whiteLabel}
                           </p>
                           <p className="text-xs text-gray-500 my-1">vs</p>
-                          <p className="text-sm text-gray-100 truncate">
-                            {black?.label ?? match.blackEntrantId}
+                          <p className="text-sm text-gray-100 truncate" title={blackLabel}>
+                            {blackLabel}
                           </p>
 
                           <div className="mt-3 text-xs text-gray-400 flex items-center justify-between">
@@ -945,6 +965,14 @@ export function TournamentLiveScreen({
                       const black = entrantsById.get(match.blackEntrantId) as
                         | TournamentEntrant
                         | undefined;
+                      const whiteLabel = withRating(
+                        white?.label ?? match.whiteEntrantId,
+                        white?.network.elo,
+                      );
+                      const blackLabel = withRating(
+                        black?.label ?? match.blackEntrantId,
+                        black?.network.elo,
+                      );
 
                       return (
                         <button
@@ -963,8 +991,7 @@ export function TournamentLiveScreen({
                             </span>
                           </div>
                           <p className="text-sm text-gray-200 mt-1 truncate">
-                            {white?.label ?? match.whiteEntrantId} vs{" "}
-                            {black?.label ?? match.blackEntrantId}
+                            {whiteLabel} vs {blackLabel}
                           </p>
                         </button>
                       );
