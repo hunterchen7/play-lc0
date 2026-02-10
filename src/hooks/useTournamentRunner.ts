@@ -48,6 +48,7 @@ const ENGINE_CACHE_BUFFER = 2;
 const MOVE_DELAY_DEFAULT_MS = 100;
 const MOVE_DELAY_MIN_MS = 0;
 const MOVE_DELAY_MAX_MS = 1000;
+const LIVE_PROGRESS_UPDATE_MIN_MS = 40;
 const MAX_GAME_DURATION_MS = 3 * 60 * 1000;
 const ENGINE_HEALTH_CHECK_TIMEOUT_MS = 2000;
 const MAX_MATCH_ERROR_RETRIES = 6;
@@ -1408,6 +1409,7 @@ export function useTournamentRunner() {
         const gameDeadlineMs = Date.now() + MAX_GAME_DURATION_MS;
         let forcedDraw = false;
         let timedOut = false;
+        let lastProgressSyncAt = 0;
 
         const remainingMs = () => gameDeadlineMs - Date.now();
         const hasTimedOut = () => remainingMs() <= 0;
@@ -1416,6 +1418,37 @@ export function useTournamentRunner() {
           timedOut = true;
           invalidateEngineForEntrant(whiteEntrant.id);
           invalidateEngineForEntrant(blackEntrant.id);
+        };
+        const syncRunningSnapshot = (force = false) => {
+          const now = Date.now();
+          if (!force && now - lastProgressSyncAt < LIVE_PROGRESS_UPDATE_MIN_MS) {
+            return;
+          }
+          lastProgressSyncAt = now;
+
+          setRuntime((prev) => ({
+            ...prev,
+            matches: prev.matches.map((item) =>
+              item.id === matchId
+                ? {
+                    ...item,
+                    moves: [...moves],
+                    fenHistory: [...fenHistory],
+                    evalHistory: [...evalHistory],
+                    pgn: buildTournamentPgn({
+                      eventName: "Play Lc0 Tournament",
+                      white: whiteEntrant.label,
+                      black: blackEntrant.label,
+                      round: match.round,
+                      board: match.board,
+                      result: "*",
+                      moves,
+                      startFen: match.startFen,
+                    }),
+                  }
+                : item,
+            ),
+          }));
         };
 
         try {
@@ -1444,18 +1477,7 @@ export function useTournamentRunner() {
             }
           }
 
-          setRuntime((prev) => ({
-            ...prev,
-            matches: prev.matches.map((item) =>
-              item.id === matchId
-                ? {
-                    ...item,
-                    fenHistory: [...fenHistory],
-                    evalHistory: [...evalHistory],
-                  }
-                : item,
-            ),
-          }));
+          syncRunningSnapshot(true);
 
           let plies = 0;
 
@@ -1516,29 +1538,7 @@ export function useTournamentRunner() {
             evalHistory.push(snapshot);
             plies += 1;
 
-            setRuntime((prev) => ({
-              ...prev,
-              matches: prev.matches.map((item) =>
-                item.id === matchId
-                  ? {
-                      ...item,
-                      moves: [...moves],
-                      fenHistory: [...fenHistory],
-                      evalHistory: [...evalHistory],
-                      pgn: buildTournamentPgn({
-                        eventName: "Play Lc0 Tournament",
-                        white: whiteEntrant.label,
-                        black: blackEntrant.label,
-                        round: match.round,
-                        board: match.board,
-                        result: "*",
-                        moves,
-                        startFen: match.startFen,
-                      }),
-                    }
-                  : item,
-              ),
-            }));
+            syncRunningSnapshot();
 
             const moveDelayMs = clampMoveDelayMs(stateRef.current.moveDelayMs);
             if (!game.isGameOver() && moveDelayMs > 0) {
