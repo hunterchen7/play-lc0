@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Download, Check, Trash2, Loader2, ExternalLink, Plus } from "lucide-react";
+import { Download, Check, Trash2, Loader2, ExternalLink, Plus, Share2 } from "lucide-react";
 import { NETWORKS, type NetworkInfo } from "../constants/networks";
 import type { SavedGame } from "../types/game";
 import {
@@ -15,6 +15,7 @@ import { validateFen } from "../utils/fen";
 import { FenPreviewBoard } from "./FenPreviewBoard";
 import { OpeningPicker } from "./OpeningPicker";
 import type { SelectedOpening } from "../types/openings";
+import { buildShareUrl } from "../utils/shareParams";
 
 type SortColumn = "elo" | "size";
 type SortDirection = "asc" | "desc";
@@ -144,6 +145,7 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
     () => loadOpeningsForNetwork(selected.id),
   );
   const [showOpeningPicker, setShowOpeningPicker] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
 
   // Derived FEN validation — no effect needed
   const fenValidation = useMemo(() => {
@@ -325,6 +327,7 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
       });
     }
   }, []);
+
 
   const handleDelete = useCallback(async (net: NetworkInfo) => {
     if (net.isCustom) {
@@ -719,17 +722,49 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
           )}
         </div>
 
-        <button
-          onClick={handleStart}
-          disabled={!selectedIsCached || cacheLoading}
-          className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-700 disabled:text-gray-500 text-white text-xl font-semibold rounded-xl transition-colors"
-        >
-          {cacheLoading
-            ? "Checking cached models..."
-            : selectedIsCached
-              ? `Play vs ${selected.name}`
-              : `${selected.name} not downloaded`}
-        </button>
+        <div className="flex gap-2 w-full">
+          <button
+            onClick={handleStart}
+            disabled={!selectedIsCached || cacheLoading}
+            className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-700 disabled:text-gray-500 text-white text-xl font-semibold rounded-xl transition-colors"
+          >
+            {cacheLoading
+              ? "Checking cached models..."
+              : selectedIsCached
+                ? `Play vs ${selected.name}`
+                : `${selected.name} not downloaded`}
+          </button>
+          {!selected.isCustom && (
+            <div className="relative">
+              <button
+                onClick={() => {
+                  if (shareCopied) return;
+                  const url = buildShareUrl({
+                    networkId: selected.id,
+                    color,
+                    temperature,
+                    fen: fenValid ? fenInput.trim() : undefined,
+                  });
+                  navigator.clipboard.writeText(url);
+                  setShareCopied(true);
+                  setTimeout(() => setShareCopied(false), 2000);
+                }}
+                disabled={shareCopied}
+                className="px-4 py-4 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-gray-500 text-gray-300 rounded-xl transition-colors flex items-center gap-2 shrink-0"
+                title="Copy shareable link"
+              >
+                <Share2 size={20} />
+                <span className="text-sm font-medium">Share</span>
+              </button>
+              {shareCopied && (
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-slate-900 text-white text-xs rounded-lg whitespace-nowrap shadow-lg animate-fade-in">
+                  Copied URL
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <div
