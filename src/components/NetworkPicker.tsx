@@ -55,6 +55,8 @@ interface NetworkPickerProps {
     network: NetworkInfo,
     color: "w" | "b",
     temperature: number,
+    searchNodes: number,
+    searchTimeMs: number,
     savedGame?: SavedGame,
     startFen?: string,
     openings?: SelectedOpening[],
@@ -146,6 +148,14 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
   );
   const [showOpeningPicker, setShowOpeningPicker] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
+  const [searchNodes, setSearchNodes] = useState(() => {
+    const stored = localStorage.getItem("lc0-search-nodes");
+    return stored ? parseInt(stored, 10) : 0;
+  });
+  const [searchTimeMs, setSearchTimeMs] = useState(() => {
+    const stored = localStorage.getItem("lc0-search-time-ms");
+    return stored ? parseInt(stored, 10) : 0;
+  });
 
   // Derived FEN validation — no effect needed
   const fenValidation = useMemo(() => {
@@ -363,7 +373,7 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
       color === "random" ? (Math.random() < 0.5 ? "w" : "b") : color;
     const startFen = fenValid ? fenInput.trim() : undefined;
     const openings = selectedOpenings.length > 0 ? selectedOpenings : undefined;
-    onStart(selected, actualColor, temperature, undefined, startFen, openings);
+    onStart(selected, actualColor, temperature, searchNodes, searchTimeMs, undefined, startFen, openings);
   };
 
   return (
@@ -633,6 +643,62 @@ export function NetworkPicker({ onStart }: NetworkPickerProps) {
               <span>More random</span>
             </div>
           </div>
+        </div>
+
+        <div className="w-full">
+          <h2 className="text-lg font-semibold text-gray-200 mb-3">
+            Search
+          </h2>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min="0"
+                max="800"
+                step="1"
+                value={searchNodes}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value, 10);
+                  setSearchNodes(v);
+                  localStorage.setItem("lc0-search-nodes", v.toString());
+                }}
+                className="flex-1 accent-emerald-500"
+              />
+              <span className="text-gray-300 font-mono text-sm w-20 text-right">
+                {searchNodes === 0 ? "Off" : `${searchNodes} nodes`}
+              </span>
+            </div>
+            <div className="flex justify-between text-xs text-gray-500 mb-2">
+              <span>Policy only</span>
+              <span>MCTS search</span>
+            </div>
+          </div>
+          {searchNodes > 0 && (
+            <div className="flex flex-col gap-1 mt-2">
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min="0"
+                  max="30000"
+                  step="500"
+                  value={searchTimeMs}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    setSearchTimeMs(v);
+                    localStorage.setItem("lc0-search-time-ms", v.toString());
+                  }}
+                  className="flex-1 accent-emerald-500"
+                />
+                <span className="text-gray-300 font-mono text-sm w-20 text-right">
+                  {searchTimeMs === 0 ? "No limit" : `${(searchTimeMs / 1000).toFixed(1)}s`}
+                </span>
+              </div>
+              <div className="flex justify-between text-xs text-gray-500 mb-2">
+                <span>No time limit</span>
+                <span>30s max</span>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="w-full">

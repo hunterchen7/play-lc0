@@ -17,6 +17,16 @@ export class Lc0Engine {
     resolve: (wdl: [number, number, number]) => void
     reject: (error: Error) => void
   } | null = null
+  private pendingSearch: {
+    resolve: (result: {
+      bestMove: string
+      bestVisits: number
+      totalNodes: number
+      topMoves: { move: string; visits: number; q: number; prior: number }[]
+      wdl: [number, number, number]
+    }) => void
+    reject: (error: Error) => void
+  } | null = null
 
   constructor() {
     this.worker = new Worker(
@@ -82,12 +92,38 @@ export class Lc0Engine {
         this.pendingEvaluation = null
         break
 
+      case 'mctsResult':
+        this.notify({
+          isThinking: false,
+          lastMove: msg.bestMove,
+          lastConfidence: msg.bestVisits / msg.totalNodes,
+          wdl: msg.wdl,
+          searchProgress: null,
+        })
+        this.pendingSearch?.resolve({
+          bestMove: msg.bestMove,
+          bestVisits: msg.bestVisits,
+          totalNodes: msg.totalNodes,
+          topMoves: msg.topMoves,
+          wdl: msg.wdl,
+        })
+        this.pendingSearch = null
+        break
+
+      case 'mctsProgress':
+        this.notify({
+          searchProgress: { nodes: msg.nodes, totalNodes: msg.totalNodes },
+        })
+        break
+
       case 'error':
-        this.notify({ error: msg.error, isThinking: false })
+        this.notify({ error: msg.error, isThinking: false, searchProgress: null })
         this.pendingMove?.reject(new Error(msg.error))
         this.pendingEvaluation?.reject(new Error(msg.error))
+        this.pendingSearch?.reject(new Error(msg.error))
         this.pendingMove = null
         this.pendingEvaluation = null
+        this.pendingSearch = null
         break
     }
   }
@@ -125,6 +161,29 @@ export class Lc0Engine {
       }
       this.pendingEvaluation = { resolve, reject }
       this.post({ type: 'evaluatePosition', fen, history })
+    })
+  }
+
+  async mctsSearch(
+    fen: string,
+    history: string[],
+    nodeLimit: number,
+    timeLimitMs?: number,
+  ): Promise<{
+    bestMove: string
+    bestVisits: number
+    totalNodes: number
+    topMoves: { move: string; visits: number; q: number; prior: number }[]
+    wdl: [number, number, number]
+  }> {
+    this.notify({ isThinking: true, searchProgress: { nodes: 0, totalNodes: nodeLimit } })
+    return new Promise((resolve, reject) => {
+      if (this.pendingSearch) {
+        reject(new Error('Engine already has a pending search request'))
+        return
+      }
+      this.pendingSearch = { resolve, reject }
+      this.post({ type: 'mctsSearch', fen, history, nodeLimit, timeLimitMs })
     })
   }
 

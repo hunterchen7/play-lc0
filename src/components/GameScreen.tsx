@@ -24,6 +24,7 @@ const INITIAL_ENGINE_STATE: EngineState = {
   lastConfidence: null,
   wdl: null,
   error: null,
+  searchProgress: null,
 };
 
 function getGameStatus(game: Chess): string {
@@ -237,14 +238,25 @@ export function GameScreen({
       if (legalMoves.length === 0) return;
 
       try {
-        const result = await engine.getBestMove(
-          fen,
-          history,
-          legalMoves,
-          temperatureRef.current,
-        );
+        let bestMove: string;
 
-        const moveData = uciToChessJsMove(result.move);
+        if (config.searchNodes > 0) {
+          // MCTS search
+          const timeLimitMs = config.searchTimeMs > 0 ? config.searchTimeMs : undefined;
+          const result = await engine.mctsSearch(fen, history, config.searchNodes, timeLimitMs);
+          bestMove = result.bestMove;
+        } else {
+          // Raw policy (no search)
+          const result = await engine.getBestMove(
+            fen,
+            history,
+            legalMoves,
+            temperatureRef.current,
+          );
+          bestMove = result.move;
+        }
+
+        const moveData = uciToChessJsMove(bestMove);
         const move = currentGame.move(moveData);
 
         if (move) {
@@ -267,7 +279,7 @@ export function GameScreen({
         console.error("Engine move failed:", e);
       }
     },
-    [],
+    [config.searchNodes],
   );
 
   // Trigger engine move when it's the engine's turn
