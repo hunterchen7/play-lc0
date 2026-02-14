@@ -86,7 +86,7 @@ export default function App() {
         clearShareParams();
         setScreen({
           type: "game",
-          config: { network: net, playerColor: color, temperature: params.temperature, startFen: fen },
+          config: { network: net, playerColor: color, temperature: params.temperature, searchNodes: 0, searchTimeMs: 0, startFen: fen },
         });
       }
     });
@@ -132,7 +132,7 @@ export default function App() {
                 clearShareParams();
                 setScreen({
                   type: "game",
-                  config: { network: net, playerColor: color, temperature, startFen: fen },
+                  config: { network: net, playerColor: color, temperature, searchNodes: 0, searchTimeMs: 0, startFen: fen },
                 });
               }}
               className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors"
@@ -148,10 +148,10 @@ export default function App() {
   if (screen.type === "home") {
     return (
       <HomeScreen
-        onStart={(network, color, temperature, savedGame, startFen, openings) =>
+        onStart={(network, color, temperature, searchNodes, searchTimeMs, savedGame, startFen, openings) =>
           setScreen({
             type: "game",
-            config: { network, playerColor: color, temperature, savedGame, startFen, openings },
+            config: { network, playerColor: color, temperature, searchNodes, searchTimeMs, savedGame, startFen, openings },
           })
         }
         onOpenTournament={() => setScreen({ type: "tournament" })}

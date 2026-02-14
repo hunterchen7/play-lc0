@@ -9,6 +9,8 @@ interface HomeScreenProps {
     network: NetworkInfo,
     color: "w" | "b",
     temperature: number,
+    searchNodes: number,
+    searchTimeMs: number,
     savedGame?: SavedGame,
     startFen?: string,
     openings?: SelectedOpening[],

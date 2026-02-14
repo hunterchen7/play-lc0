@@ -8,6 +8,8 @@ interface GameHistoryProps {
     network: NetworkInfo,
     color: "w" | "b",
     temperature: number,
+    searchNodes: number,
+    searchTimeMs: number,
     savedGame?: SavedGame,
   ) => void;
 }
@@ -114,7 +116,7 @@ export function GameHistory({ onContinue }: GameHistoryProps) {
                             (n) => n.name === game.network,
                           );
                           if (network) {
-                            onContinue(network, game.playerColor, 0.15, game);
+                            onContinue(network, game.playerColor, 0.15, 0, 0, game);
                           }
                         }}
                         className="hidden group-hover/continue:block text-sm font-medium text-emerald-400 hover:text-emerald-300 transition-colors"

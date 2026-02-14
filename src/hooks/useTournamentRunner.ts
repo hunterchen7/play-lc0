@@ -1475,27 +1475,55 @@ export function useTournamentRunner() {
 
             if (legalMoves.length === 0) break;
 
-            const best = await withMatchAbort(
-              resolveWithin(
-                engine.getBestMove(
-                  game.fen(),
-                  fenHistory,
-                  legalMoves,
-                  toMoveEntrant.temperature,
+            let bestMove: string;
+            if (toMoveEntrant.searchNodes > 0) {
+              // MCTS search
+              const mctsTimeMs = toMoveEntrant.searchTimeMs > 0
+                ? Math.min(toMoveEntrant.searchTimeMs, remainingMs())
+                : remainingMs();
+              const mctsResult = await withMatchAbort(
+                resolveWithin(
+                  engine.mctsSearch(
+                    game.fen(),
+                    fenHistory,
+                    toMoveEntrant.searchNodes,
+                    mctsTimeMs > 0 ? mctsTimeMs : undefined,
+                  ),
+                  remainingMs(),
                 ),
-                remainingMs(),
-              ),
-              abortToken,
-            );
-            if (best === "aborted") return;
-            if (best === null) {
-              adjudicateTimeoutDraw();
-              break;
+                abortToken,
+              );
+              if (mctsResult === "aborted") return;
+              if (mctsResult === null) {
+                adjudicateTimeoutDraw();
+                break;
+              }
+              bestMove = mctsResult.bestMove;
+            } else {
+              // Raw policy (no search)
+              const best = await withMatchAbort(
+                resolveWithin(
+                  engine.getBestMove(
+                    game.fen(),
+                    fenHistory,
+                    legalMoves,
+                    toMoveEntrant.temperature,
+                  ),
+                  remainingMs(),
+                ),
+                abortToken,
+              );
+              if (best === "aborted") return;
+              if (best === null) {
+                adjudicateTimeoutDraw();
+                break;
+              }
+              bestMove = best.move;
             }
 
-            const move = game.move(uciToChessJsMove(best.move));
+            const move = game.move(uciToChessJsMove(bestMove));
             if (!move) {
-              throw new Error(`Illegal engine move: ${best.move}`);
+              throw new Error(`Illegal engine move: ${bestMove}`);
             }
 
             moves.push(move.san);

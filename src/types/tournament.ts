@@ -20,6 +20,8 @@ export interface TournamentEntrant {
   id: string;
   network: NetworkInfo;
   temperature: number;
+  searchNodes: number;
+  searchTimeMs: number;
   label: string;
 }
 

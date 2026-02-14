@@ -30,6 +30,8 @@ interface EntrantDraft {
   id: string;
   networkId: string;
   temperature: number;
+  searchNodes: number;
+  searchTimeMs: number;
   customLabel: string;
 }
 
@@ -60,11 +62,15 @@ const DEFAULT_TIEBREAK_WIN_BY = 1;
 function createEntrantDraft(
   networkId: string,
   temperature: number,
+  searchNodes: number = 0,
+  searchTimeMs: number = 0,
 ): EntrantDraft {
   return {
     id: `entrant-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     networkId,
     temperature,
+    searchNodes,
+    searchTimeMs,
     customLabel: "",
   };
 }
@@ -231,6 +237,20 @@ function loadPersistedSetupDraft(): PersistedTournamentSetupDraft | null {
               0,
               2,
             ),
+            searchNodes: clamp(
+              Number.isFinite(item.searchNodes)
+                ? Math.floor(Number(item.searchNodes))
+                : 0,
+              0,
+              800,
+            ),
+            searchTimeMs: clamp(
+              Number.isFinite(item.searchTimeMs)
+                ? Math.floor(Number(item.searchTimeMs))
+                : 0,
+              0,
+              30000,
+            ),
             customLabel:
               typeof item.customLabel === "string" ? item.customLabel : "",
           }))
@@ -341,6 +361,8 @@ export function TournamentSetupScreen({
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [addTemperature, setAddTemperature] = useState(0.15);
+  const [addSearchNodes, setAddSearchNodes] = useState(0);
+  const [addSearchTimeMs, setAddSearchTimeMs] = useState(0);
   const [modalSearch, setModalSearch] = useState("");
   const [modalDownloadedOnly, setModalDownloadedOnly] = useState(false);
   const [modalArchFilter, setModalArchFilter] = useState("all");
@@ -566,7 +588,7 @@ export function TournamentSetupScreen({
   const entrantKeySet = useMemo(() => {
     return new Set(
       entrants.map(
-        (entrant) => `${entrant.networkId}:${entrant.temperature.toFixed(2)}`,
+        (entrant) => `${entrant.networkId}:${entrant.temperature.toFixed(2)}:${entrant.searchNodes}:${entrant.searchTimeMs}`,
       ),
     );
   }, [entrants]);
@@ -574,7 +596,7 @@ export function TournamentSetupScreen({
   const duplicateKeys = useMemo(() => {
     const keyCounts = new Map<string, number>();
     for (const entrant of entrants) {
-      const key = `${entrant.networkId}:${entrant.temperature.toFixed(2)}`;
+      const key = `${entrant.networkId}:${entrant.temperature.toFixed(2)}:${entrant.searchNodes}:${entrant.searchTimeMs}`;
       keyCounts.set(key, (keyCounts.get(key) ?? 0) + 1);
     }
 
@@ -625,10 +647,10 @@ export function TournamentSetupScreen({
     const keyTemp = addTemperature.toFixed(2);
     return new Set(
       networks.filter((network) =>
-        entrantKeySet.has(`${network.id}:${keyTemp}`),
+        entrantKeySet.has(`${network.id}:${keyTemp}:${addSearchNodes}:${addSearchTimeMs}`),
       ).map((network) => network.id),
     );
-  }, [networks, addTemperature, entrantKeySet]);
+  }, [networks, addTemperature, addSearchNodes, addSearchTimeMs, entrantKeySet]);
 
   const uncachedNetworkIds = useMemo(
     () =>
@@ -765,7 +787,7 @@ export function TournamentSetupScreen({
 
     for (const networkId of selectedNetworkIds) {
       if (blockedNetworkIds.has(networkId)) continue;
-      toAdd.push(createEntrantDraft(networkId, temp));
+      toAdd.push(createEntrantDraft(networkId, temp, addSearchNodes, addSearchTimeMs));
     }
 
     if (toAdd.length === 0) return;
@@ -781,10 +803,12 @@ export function TournamentSetupScreen({
   const executeBulkAdd = useCallback(
     (cached: NetworkInfo[], uncached: NetworkInfo[]) => {
       const temp = Number(addTemperature.toFixed(2));
+      const nodes = addSearchNodes;
+      const timeMs = addSearchTimeMs;
 
       if (cached.length > 0) {
         const newEntrants = cached.map((n) =>
-          createEntrantDraft(n.id, temp),
+          createEntrantDraft(n.id, temp, nodes, timeMs),
         );
         setEntrants((prev) => [...prev, ...newEntrants]);
       }
@@ -796,7 +820,7 @@ export function TournamentSetupScreen({
 
       closeAddModal();
     },
-    [addTemperature, handleDownload, closeAddModal],
+    [addTemperature, addSearchNodes, addSearchTimeMs, handleDownload, closeAddModal],
   );
 
   const handleAddAllFiltered = useCallback(() => {
@@ -855,12 +879,20 @@ export function TournamentSetupScreen({
       }
 
       const temp = Number(entrant.temperature.toFixed(2));
+      let autoLabel = `${network.name} @ ${temp.toFixed(2)}`;
+      if (entrant.searchNodes > 0) {
+        autoLabel += ` · ${entrant.searchNodes}n`;
+        if (entrant.searchTimeMs > 0) {
+          autoLabel += `/${(entrant.searchTimeMs / 1000).toFixed(1)}s`;
+        }
+      }
       mappedEntrants.push({
         id: entrant.id,
         network,
         temperature: temp,
-        label:
-          entrant.customLabel.trim() || `${network.name} @ ${temp.toFixed(2)}`,
+        searchNodes: entrant.searchNodes,
+        searchTimeMs: entrant.searchTimeMs,
+        label: entrant.customLabel.trim() || autoLabel,
       });
     }
 
@@ -926,6 +958,8 @@ export function TournamentSetupScreen({
           const base = createEntrantDraft(
             networkId,
             clamp(Number(entrant.temperature), 0, 2),
+            clamp(Math.floor(Number(entrant.searchNodes) || 0), 0, 800),
+            clamp(Math.floor(Number(entrant.searchTimeMs) || 0), 0, 30000),
           );
           mappedEntrants.push({
             ...base,
@@ -1040,7 +1074,7 @@ export function TournamentSetupScreen({
               )}
               <div className="flex flex-col gap-3 max-h-[50vh] overflow-y-scroll always-scrollbar pr-3">
                 {filteredEntrants.map((entrant, index) => {
-                  const key = `${entrant.networkId}:${entrant.temperature.toFixed(2)}`;
+                  const key = `${entrant.networkId}:${entrant.temperature.toFixed(2)}:${entrant.searchNodes}:${entrant.searchTimeMs}`;
                   const duplicate = duplicateKeys.has(key);
                   const network = networkById.get(entrant.networkId) ?? null;
                   const isCached = network
@@ -1153,6 +1187,48 @@ export function TournamentSetupScreen({
                             className="px-2 py-2 bg-slate-900 border border-slate-700 rounded-md text-sm"
                           />
                         </label>
+                      </div>
+
+                      <div className="grid md:grid-cols-2 gap-2 mt-2">
+                        <label className="flex flex-col gap-1">
+                          <span className="text-xs text-gray-400">
+                            Search Nodes ({entrant.searchNodes === 0 ? "Off" : entrant.searchNodes})
+                          </span>
+                          <input
+                            type="range"
+                            min="0"
+                            max="800"
+                            step="1"
+                            value={entrant.searchNodes}
+                            onChange={(e) =>
+                              updateEntrant(entrant.id, {
+                                searchNodes: parseInt(e.target.value, 10),
+                              })
+                            }
+                            className="w-full accent-emerald-500"
+                          />
+                        </label>
+
+                        {entrant.searchNodes > 0 && (
+                          <label className="flex flex-col gap-1">
+                            <span className="text-xs text-gray-400">
+                              Time Limit ({entrant.searchTimeMs === 0 ? "None" : `${(entrant.searchTimeMs / 1000).toFixed(1)}s`})
+                            </span>
+                            <input
+                              type="range"
+                              min="0"
+                              max="30000"
+                              step="500"
+                              value={entrant.searchTimeMs}
+                              onChange={(e) =>
+                                updateEntrant(entrant.id, {
+                                  searchTimeMs: parseInt(e.target.value, 10),
+                                })
+                              }
+                              className="w-full accent-emerald-500"
+                            />
+                          </label>
+                        )}
                       </div>
 
                       {duplicate && (
@@ -1531,9 +1607,9 @@ export function TournamentSetupScreen({
                     </p>
                     {parsedPlacings.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1.5">
-                        {parsedPlacings.map((placing) => (
+                        {parsedPlacings.map((placing, placingIdx) => (
                           <span
-                            key={`${item.id}-placing-${placing.rank}-${placing.label}`}
+                            key={`${item.id}-placing-${placingIdx}-${placing.rank}-${placing.label}`}
                             className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] ${placementChipClass(
                               placing.rank,
                             )}`}
@@ -1667,8 +1743,7 @@ export function TournamentSetupScreen({
             <div className="grid md:grid-cols-2 gap-2 items-end">
               <label className="flex flex-col gap-1">
                 <span className="text-xs text-gray-400">
-                  Temperature for selected entrants ({addTemperature.toFixed(2)}
-                  )
+                  Temperature ({addTemperature.toFixed(2)})
                 </span>
                 <input
                   type="range"
@@ -1682,6 +1757,42 @@ export function TournamentSetupScreen({
                   className="w-full accent-emerald-500"
                 />
               </label>
+
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-gray-400">
+                  Search Nodes ({addSearchNodes === 0 ? "Off" : addSearchNodes})
+                </span>
+                <input
+                  type="range"
+                  min="0"
+                  max="800"
+                  step="1"
+                  value={addSearchNodes}
+                  onChange={(e) =>
+                    setAddSearchNodes(parseInt(e.target.value, 10))
+                  }
+                  className="w-full accent-emerald-500"
+                />
+              </label>
+
+              {addSearchNodes > 0 && (
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs text-gray-400">
+                    Time Limit ({addSearchTimeMs === 0 ? "None" : `${(addSearchTimeMs / 1000).toFixed(1)}s`})
+                  </span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="30000"
+                    step="500"
+                    value={addSearchTimeMs}
+                    onChange={(e) =>
+                      setAddSearchTimeMs(parseInt(e.target.value, 10))
+                    }
+                    className="w-full accent-emerald-500"
+                  />
+                </label>
+              )}
 
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <button
